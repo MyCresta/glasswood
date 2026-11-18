@@ -83,7 +83,7 @@ body.placing #scene { cursor: crosshair; }
 .colony-name { font-size: 0.78rem; color: var(--muted); }
 
 .resources {
-  display: flex; gap: 6px; flex: 1; min-width: 0; overflow-x: auto; scrollbar-width: none;
+  display: flex; gap: 6px; flex: 0 1 auto; min-width: 0; overflow-x: auto; scrollbar-width: none;
   padding: 2px;
 }
 .resources::-webkit-scrollbar { display: none; }
@@ -106,6 +106,19 @@ body.placing #scene { cursor: crosshair; }
 .res.warn .res-net:empty { display: none; }
 
 .top-actions { display: flex; gap: 6px; flex: none; align-items: center; }
+.view-tabs {
+  display: flex; gap: 2px; padding: 4px; flex: none; margin: 0 auto;
+  background: var(--panel); border: 1px solid var(--line); border-radius: 999px; backdrop-filter: blur(12px); box-shadow: var(--shadow);
+}
+.view-tab {
+  display: flex; align-items: center; gap: 7px; border: 0; background: transparent; color: var(--muted);
+  padding: 8px 16px; border-radius: 999px; font-weight: 500; cursor: pointer;
+}
+.view-tab:hover { color: var(--text); }
+.view-tab[aria-selected='true'] { background: var(--text); color: var(--panel-solid); }
+.vt-key { font-size: 0.7rem; opacity: 0.6; border: 1px solid currentColor; border-radius: 5px; padding: 0 4px; line-height: 1.3; }
+#stage.view-in { animation: view-in 0.4s ease-out; }
+@keyframes view-in { from { opacity: 0.15; } to { opacity: 1; } }
 .save-ind, .pause, .icon-btn, .btn, .cam-btn, .nav-btn, .chip-btn, .tab, .linkish { cursor: pointer; }
 .save-ind {
   background: transparent; border: 1px solid var(--line); border-radius: 999px; padding: 7px 12px;
@@ -453,7 +466,11 @@ body.clean #show-ui { display: block; }
   .civ { padding: 4px 10px 4px 4px; }
   .emblem-wrap { width: 32px; height: 32px; }
   .civ-name { font-size: 0.86rem; max-width: 36vw; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  .resources { order: 3; flex-basis: 100%; }
+  .resources { order: 3; flex: 0 0 auto; }
+  .view-tabs { order: 4; margin: 0; flex: 1 1 100%; justify-content: space-between; }
+  .view-tab { padding: 6px 8px; font-size: 0.8rem; flex: 1; justify-content: center; }
+  .vt-key { display: none; }
+  .res { min-width: 0; }
   .res { min-width: 92px; padding: 5px 10px 4px; }
   .save-ind { display: none; }
   .top-actions { margin-left: auto; }
@@ -475,11 +492,11 @@ body.clean #show-ui { display: block; }
   #night-card { padding: 10px 12px; }
   .nc-row { flex-direction: column; align-items: stretch; gap: 8px; }
   .nc-actions { justify-content: space-between; }
-  #cam-wrap { left: auto; right: 8px; top: 118px; bottom: auto; flex-direction: column; align-items: flex-end; }
+  #cam-wrap { left: auto; right: 8px; top: 168px; bottom: auto; flex-direction: column; align-items: flex-end; }
   #cam-toggle { display: grid; place-items: center; }
   #cam { display: none; }
   #cam.open { display: block; }
-  #toasts { right: 62px; left: 8px; width: auto; top: 112px; }
+  #toasts { right: 62px; left: 8px; width: auto; top: 168px; }
   body.panel-open #toasts { right: 8px; }
   body.panel-open #cam-wrap { display: none; }
   .desktop-only { display: none; }
@@ -489,7 +506,7 @@ body.clean #show-ui { display: block; }
   .btn { padding: 10px 16px; }
 }
 @media (max-width: 720px) and (min-height: 0) {
-  #guide { top: 112px; bottom: auto; right: 60px; max-height: 34vh; }
+  #guide { top: 168px; bottom: auto; right: 60px; max-height: 30vh; }
   body.is-night #guide { display: none; }
 }
 @media (pointer: coarse) {

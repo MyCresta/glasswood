@@ -6,10 +6,16 @@ import { availableGold } from '../sim/state.js';
 import { nightPreview } from '../sim/battle.js';
 import { cancelUpgrade, OBJECTIVES } from '../sim/village.js';
 import { callNight } from '../sim/time.js';
-import { buildingView, spawnView, villageView, logView, settingsView, helpView } from './views.js';
+import { buildingView, spawnView, villageView, logView, settingsView, helpView, locationView } from './views.js';
+
+const VIEW_TABS = [
+  { id: 'village', label: 'Village', key: '1' },
+  { id: 'defense', label: 'Defence', key: '2' },
+  { id: 'world', label: 'World', key: '3' },
+];
 
 const NAV = [
-  { id: 'village', label: 'Village', key: 'V', icon: '⌂' },
+  { id: 'village', label: 'Overview', key: 'B', icon: '⌂' },
   { id: 'log', label: 'Log', key: 'L', icon: '☰' },
   { id: 'settings', label: 'Settings', key: 'O', icon: '⚙' },
   { id: 'help', label: 'Help', key: '?', icon: '?' },
@@ -41,7 +47,8 @@ export class UI {
     this.saveInd = h('button.save-ind', { type: 'button', onclick: () => this.g.saveNow(true), title: 'Save now' }, 'Saved');
     this.pauseBtn = h('button.pause', { type: 'button', onclick: () => this.togglePause(), 'aria-pressed': 'false' });
     this.cleanBtn = h('button.icon-btn', { type: 'button', onclick: () => this.setClean(true), 'aria-label': 'Hide interface (H)', title: 'Hide interface (H)', html: '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M2 12s4-7 10-7 10 7 10 7-4 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/></svg>' });
-    clear(top).append(this.civBtn, h('div.resources', { role: 'group', 'aria-label': 'Village status' }, this.goldEl, this.nightEl), h('div.top-actions', {}, this.saveInd, this.cleanBtn, this.pauseBtn));
+    this.viewTabs = h('div.view-tabs', { role: 'tablist', 'aria-label': 'Views' }, VIEW_TABS.map((t) => h('button.view-tab', { type: 'button', role: 'tab', dataset: { v: t.id }, title: `${t.label} view (${t.key})`, onclick: () => this.g.setView(t.id) }, h('span.vt-key', { 'aria-hidden': 'true' }, t.key), t.label)));
+    clear(top).append(this.civBtn, h('div.resources', { role: 'group', 'aria-label': 'Village status' }, this.goldEl, this.nightEl), this.viewTabs, h('div.top-actions', {}, this.saveInd, this.cleanBtn, this.pauseBtn));
 
     this.nav = document.getElementById('nav');
     clear(this.nav).append(...NAV.map((n) => h('button.nav-btn', {
@@ -68,6 +75,11 @@ export class UI {
     camToggle.onclick = () => { const on = cam.classList.toggle('open'); camToggle.setAttribute('aria-expanded', on); };
   }
 
+  markView(name) {
+    this.viewTabs.querySelectorAll('.view-tab').forEach((b) => b.setAttribute('aria-selected', String(b.dataset.v === name)));
+    document.body.dataset.view = name;
+  }
+
   setClean(on) {
     document.body.classList.toggle('clean', on);
     if (on) this.showUiBtn.focus();
@@ -88,7 +100,7 @@ export class UI {
   open(view, arg = null) {
     this.view = view;
     this.arg = arg;
-    if (view !== 'building' && view !== 'spawn') this.g.diorama.select(null);
+    if (!['building', 'spawn', 'location'].includes(view)) this.g.diorama.select(null);
     this.renderPanel(true);
     this.nav.querySelectorAll('.nav-btn').forEach((b) => b.setAttribute('aria-current', String(b.dataset.view === view)));
     this.g.audio.play('click');
@@ -103,10 +115,12 @@ export class UI {
   }
 
   select(id) {
-    if (!id) { if (this.view === 'building' || this.view === 'spawn') this.close(); return; }
+    if (!id) { if (['building', 'spawn', 'location'].includes(this.view)) this.close(); return; }
     this.state.objectives.flags.selected = true;
+    if (id.startsWith('spawn:') && this.g.diorama.active !== 'defense') this.g.setView('defense');
+    if (id.startsWith('loc:') && this.g.diorama.active !== 'world') this.g.setView('world');
     this.g.diorama.select(id);
-    if (id.startsWith('spawn:')) { this.view = 'spawn'; this.arg = id.slice(6); } else { this.view = 'building'; this.arg = id; }
+    if (id.startsWith('spawn:')) { this.view = 'spawn'; this.arg = id.slice(6); } else if (id.startsWith('loc:')) { this.view = 'location'; this.arg = id.slice(4); } else { this.view = 'building'; this.arg = id; }
     this.renderPanel(true);
     this.g.audio.play('click');
   }
@@ -118,6 +132,7 @@ export class UI {
     switch (this.view) {
       case 'building': v = buildingView(this, this.arg); break;
       case 'spawn': v = spawnView(this, this.arg); break;
+      case 'location': v = locationView(this, this.arg); break;
       case 'village': v = villageView(this); break;
       case 'log': v = logView(this); break;
       case 'settings': v = settingsView(this); break;
@@ -368,10 +383,11 @@ export class UI {
         ArrowLeft: () => D.panBy(-1.5, 0), a: () => D.panBy(-1.5, 0), ArrowRight: () => D.panBy(1.5, 0), d: () => D.panBy(1.5, 0),
         q: () => D.rotateBy(-0.25), e: () => D.rotateBy(0.25), '+': () => D.zoomBy(0.85), '=': () => D.zoomBy(0.85), '-': () => D.zoomBy(1.18),
         Home: () => D.resetCamera(), 0: () => D.resetCamera(),
-        v: () => this.toggle('village'), l: () => this.toggle('log'), o: () => this.toggle('settings'), '?': () => this.toggle('help'),
+        b: () => this.toggle('village'), l: () => this.toggle('log'), o: () => this.toggle('settings'), '?': () => this.toggle('help'),
         p: () => this.togglePause(), h: () => this.setClean(!document.body.classList.contains('clean')), f: () => this.g.fullscreen(),
         n: () => { if (this.state.phase === 'day') this.g.act((st) => callNight(st, this.g.events())); },
-        1: () => this.g.act((st) => { st.speed = 1; return { ok: true }; }), 2: () => this.g.act((st) => { st.speed = 2; return { ok: true }; }),
+        1: () => this.g.setView('village'), 2: () => this.g.setView('defense'), 3: () => this.g.setView('world'),
+        x: () => this.g.act((st) => { st.speed = st.speed === 2 ? 1 : 2; return { ok: true }; }),
         t: () => this.select('townhall'), r: () => this.select('archery'), g: () => this.select('walls'),
       };
       const fn = map[k];

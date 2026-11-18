@@ -8,6 +8,7 @@ import { availableGold } from '../sim/state.js';
 import { upgradeBlocker, upgradeCost, upgradeTime, queueUpgrade, levelCap, setTargeting } from '../sim/village.js';
 import { nightPreview, activeSpawns, waveSchedule, safeNight } from '../sim/battle.js';
 import { defaultField, routeFrom, spawnPos } from '../sim/map.js';
+import { LOCATIONS, LOCATION_KINDS } from '../data/world.js';
 
 const pct = (x) => `${Math.round(x * 100)}%`;
 
@@ -91,7 +92,7 @@ export function buildingView(ui, id) {
         ['Enemies defeated', fmt(s.stats.kills, 0)],
         ['Gold earned', fmt(s.stats.goldEarned, 0)],
       ])));
-    el.append(upgradeSection(ui, id, b.level < def.max ? `Archery Tower and Walls can reach level ${nx * 2}. The hall gains a new wing or tower.` : ''));
+    el.append(upgradeSection(ui, id, b.level < def.max ? `The Great Tower and Walls can reach level ${nx * 2}. The hall gains a new wing or tower.` : ''));
   } else if (b.level >= 1) {
     el.append(h('section.card', {}, h('h3', {}, 'Coming soon'), h('p', {}, def.later)));
   } else {
@@ -125,6 +126,30 @@ export function spawnView(ui, sid) {
     el.append(h('section.card', {}, h('h3', {}, 'Sealed for now'), h('p', {}, `Opens on night ${sp.opens}. Until then, nothing comes through.`)));
   }
   return { title: sp.name, sub: open ? `Spawn point, open since night ${sp.opens}` : `Spawn point, opens on night ${sp.opens}`, el };
+}
+
+export function locationView(ui, id) {
+  const s = ui.state;
+  const l = LOCATIONS.find((x) => x.id === id);
+  if (!l) return null;
+  const el = h('div.location-view');
+  if (l.kind === 'home') {
+    el.append(h('p.lead', {}, `${s.village.name}, your village. Its Great Tower can be seen from every road around.`),
+      h('div.row', {}, button('Go to the village', () => ui.g.setView('village'), { kind: 'primary' }), button('Go to the defence', () => ui.g.setView('defense'))));
+    return { title: s.village.name, sub: 'Your village', el };
+  }
+  el.append(h('p.lead', {}, l.blurb));
+  el.append(h('section.card', {}, h('h3', {}, 'What is known'),
+    statLines([
+      ['Kind of place', LOCATION_KINDS[l.kind].name],
+      ['Danger', l.difficulty ? `${l.difficulty} of 5` : 'Friendly'],
+      ['Journey there and back', `about ${dur(l.hours * 3600 * 2)}`],
+      ['Worth bringing back', l.rewards.join(', ')],
+    ])));
+  el.append(h('section.card.ruin', {}, h('h3', {}, 'Expeditions'),
+    h('p', {}, 'Expeditions set out from the Tavern in Milestone 6. A party of villagers in their Blacksmith gear will travel here, fight what they meet and bring the rewards home.'),
+    h('p.muted.small', {}, 'Villagers and gear arrive first, in Milestones 3 and 4.')));
+  return { title: l.name, sub: LOCATION_KINDS[l.kind].name, el };
 }
 
 export function villageView(ui) {
@@ -194,6 +219,7 @@ export function settingsView(ui) {
     h('div.color-pick', { role: 'radiogroup', 'aria-label': 'Banner colour' }, CIV_COLORS.map((c) => h('button.swatch', { type: 'button', role: 'radio', 'aria-checked': String(s.village.color === c), 'aria-label': `Colour ${c}`, style: { background: c }, onclick: () => { g.act((x) => { x.village.color = c; return { ok: true }; }); g.applyIdentity(); } })))));
   el.append(h('section.card', {}, h('h3', {}, 'Time'),
     toggle('Pause the game', s.paused, () => ui.togglePause(), 'Menus never pause the game. A paused game stays paused when you come back.'),
+    toggle('Switch to the Defence view at nightfall', st.autoView !== false, (v) => { st.autoView = v; g.touch(); }, 'Returns to where you were at dawn.'),
     h('p.muted.small', {}, `While you are away, the village keeps defending your best safely won night at ${pct(OFFLINE_REWARD)} of its rewards, for up to 24 hours. Time away never loses a night.`)));
   el.append(h('section.card', {}, h('h3', {}, 'Display'),
     h('fieldset.seg', {}, h('legend', {}, 'Presentation quality'),
@@ -243,8 +269,9 @@ export function helpView(ui) {
   const sec = (title, ...ps) => h('section.card', {}, h('h3', {}, title), ...ps.map((p) => h('p', {}, p)));
   const el = h('div.help-view', {},
     s.ui.guideDismissed ? h('div.row', {}, button('Show the getting-started guide', () => { s.ui.guideDismissed = false; ui.g.touch(); ui.renderGuide(); }, { kind: 'primary' })) : null,
+    sec('Three views', 'The Village view is the village up close, where you look after its buildings. The Defence view zooms far out: the village sits small in a wide landscape and the Great Tower shoots at whatever comes out of the forest. The World view shows the land beyond, with other villages, ruins and dungeons for expeditions. Switch with the tabs at the top or 1, 2 and 3.'),
     sec('Days and nights', 'Each day lasts two minutes. When it ends, a wave attacks from the open spawn points. The village fights on its own; you prepare between nights. Call the night early whenever you are ready.'),
-    sec('The village is the tower', 'Archers shoot at any enemy inside the range ring. Enemies that reach the walls hit them. If wall integrity reaches zero, the night is lost. Walls are fully repaired every dawn.'),
+    sec('The village is the tower', 'Archers on the Great Tower shoot at any enemy inside the range ring. Enemies that reach the walls hit them. If wall integrity reaches zero, the night is lost. Walls are fully repaired every dawn.'),
     sec('Winning and losing', 'A won night pays gold at dawn, and the next night is harder. A lost night costs 10% of your free gold and moves the siege back two nights. Nothing is ever destroyed. Turn on Hold to repeat a night you can win while you save up.'),
     sec('Upgrades', 'Upgrades cost gold and take a little time; one is built at a time with three more waiting. Buildings can reach twice the Town Hall’s level. Cancelling refunds everything.'),
     sec('Spawn points', 'Six spawn points ring the battlefield. One is open at first; more open as the nights go on. The dotted lines show the routes enemies will take tonight.'),
@@ -252,8 +279,8 @@ export function helpView(ui) {
     h('section.card', {}, h('h3', {}, 'Keyboard'),
       h('dl.keys', {}, ...[
         ['Arrows or WASD', 'Move the camera'], ['Q and E', 'Rotate'], ['+ and −', 'Zoom'], ['Home or 0', 'Default view'],
-        ['N', 'Call the night'], ['1 and 2', 'Night speed'], ['T, R, G', 'Town Hall, Archery Tower, Walls'],
-        ['V', 'Village overview'], ['L', 'Log'], ['O', 'Settings'], ['?', 'Help'],
+        ['1, 2, 3', 'Village, Defence and World views'], ['N', 'Call the night'], ['X', 'Night speed ×1 or ×2'], ['T, R, G', 'Town Hall, Great Tower, Walls'],
+        ['B', 'Building overview'], ['L', 'Log'], ['O', 'Settings'], ['?', 'Help'],
         ['P', 'Pause or resume'], ['H', 'Hide or show the interface'], ['F', 'Full screen'], ['Esc', 'Close'],
       ].flatMap(([k, v]) => [h('dt', {}, h('kbd', {}, k)), h('dd', {}, v)])),
       h('p.muted.small', {}, 'Mouse: drag to move, right-drag to rotate, scroll to zoom. Touch: drag to move, pinch to zoom and twist to rotate.')));

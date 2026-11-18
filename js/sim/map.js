@@ -46,9 +46,9 @@ function baseTerrain() {
   }
   const r = rng(1337);
   let placed = 0;
-  for (let tries = 0; tries < 400 && placed < 22; tries++) {
+  for (let tries = 0; tries < 900 && placed < 46; tries++) {
     const a = r() * Math.PI * 2;
-    const d = 9.8 + r() * 5.4;
+    const d = 6.5 + r() * 13.5;
     const [ci, cj] = cellOf(Math.cos(a) * d, Math.sin(a) * d);
     const shape = [[0, 0], ...[[1, 0], [0, 1], [-1, 0], [0, -1], [1, 1]].filter(() => r() < 0.45)];
     const cells = shape.map(([di, dj]) => [ci + di, cj + dj]).filter(([i, j]) => inGrid(i, j));

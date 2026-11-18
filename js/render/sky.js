@@ -1,7 +1,12 @@
 // Sky dome, stars, a ringed moon and drifting clouds.
 import * as THREE from 'three';
 import { G, add, finalize, seeded } from './kit.js';
-import { BIOMES } from './world.js';
+const BIOMES = {
+  temperate: {
+    sky: { day: ['#86bedc', '#f6e2bd', '#cdb9d8'], dusk: ['#3b4a86', '#f3a777', '#5a4677'], night: ['#0b1230', '#272656', '#100e28'] },
+    planet: { a: '#dfe3f2', b: '#b9b4d8', ring: '#e6dccb' },
+  },
+};
 
 // Sky dome with a vertical gradient, stars, a ringed gas giant and soft clouds.
 export function buildSky(biome) {
@@ -62,9 +67,9 @@ export function buildSky(biome) {
     for (let k = 0; k < 5; k++) add(c, G.sph(1, 14, 10), cloudMat, (k - 2) * 1.1 + rnd() * 0.5, rnd() * 0.5, rnd() * 0.8, { scale: [1.3 + rnd(), 0.8 + rnd() * 0.5, 1.1 + rnd() * 0.5], cast: false });
     finalize(c);
     const a = rnd() * Math.PI * 2;
-    const r = 48 + rnd() * 40;
-    c.position.set(Math.cos(a) * r, -14 - rnd() * 18, Math.sin(a) * r);
-    c.scale.setScalar(2 + rnd() * 2);
+    const r = 70 + rnd() * 70;
+    c.position.set(Math.cos(a) * r, 34 + rnd() * 22, Math.sin(a) * r);
+    c.scale.setScalar(3 + rnd() * 3);
     c.userData = { a, r, speed: 0.004 + rnd() * 0.006 };
     clouds.push(c);
     group.add(c);

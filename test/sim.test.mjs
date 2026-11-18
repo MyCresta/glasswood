@@ -23,7 +23,7 @@ test('every spawn point has a route to the walls', () => {
     const [x, z] = spawnPos(sp);
     const r = routeFrom(f, x, z);
     assert.ok(isFinite(r.length), `${sp.name} reachable`);
-    assert.ok(r.length > 6 && r.length < 14, `${sp.name} length ${r.length}`);
+    assert.ok(r.length > 15 && r.length < 26, `${sp.name} length ${r.length}`);
   }
 });
 
@@ -31,7 +31,7 @@ test('obstacles lengthen routes (groundwork for mazes)', () => {
   const tiles = TERRAIN.slice();
   const [x, z] = spawnPos(SPAWNS[0]);
   const before = routeFrom(buildFlowField(tiles), x, z).length;
-  for (let i = 10; i <= 30; i++) if (tiles[8 * 41 + i] === 0) tiles[8 * 41 + i] = 4;
+  for (let i = 14; i <= 38; i++) if (tiles[9 * 53 + i] === 0) tiles[9 * 53 + i] = 4;
   const after = routeFrom(buildFlowField(tiles), x, z).length;
   assert.ok(after > before, `route ${before.toFixed(1)} → ${after.toFixed(1)}`);
 });
@@ -78,7 +78,7 @@ test('enemies that reach the walls damage integrity', () => {
   s.night = 6;
   callNight(s, ev(s));
   s.battle.cd = 1e9; // archers asleep
-  advance(s, 20, ev(s));
+  advance(s, 36, ev(s));
   assert.equal(s.phase, 'night');
   assert.ok(s.integrity < 500);
 });

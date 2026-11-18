@@ -1,9 +1,10 @@
-import { Diorama } from './render/diorama.js';
+import { Stage } from './render/stage.js';
 import { Audio } from './audio/audio.js';
 import { UI } from './ui/app.js';
 import { h, button, dur } from './ui/dom.js';
 import { summaryView, newVillageView } from './ui/views.js';
 import { BUILDINGS, SPAWNS } from './data/village.js';
+import { LOCATIONS } from './data/world.js';
 import { newGame } from './sim/state.js';
 import { makeEvents, pump, catchUp, AWAY_GAP } from './sim/time.js';
 import { checkObjectives } from './sim/village.js';
@@ -62,6 +63,7 @@ function handleEvents(ev) {
   if (!ev.list.length && !ev.changed) return;
   bump();
   for (const e of ev.list) game.ui.toast(e.level, e.text, e);
+  autoView(ev);
   if (ev.list.some((e) => e.cat === 'night' || e.cat === 'upgrade')) game.touch();
 }
 
@@ -170,6 +172,30 @@ game.applyIdentity = () => {
   game.diorama.setAccent(col);
 };
 
+// Views: switch to Defence at nightfall and back at dawn (if the player wants).
+let autoFrom = null;
+let autoBack = null;
+game.setView = (name) => {
+  autoFrom = null;
+  clearTimeout(autoBack);
+  game.diorama.switchTo(name);
+  game.state.ui.view = name;
+  game.touch();
+};
+function autoView(ev) {
+  if (game.state.settings.autoView === false) return;
+  if (ev.list.some((e) => e.cat === 'dusk') && game.diorama.active !== 'defense') {
+    autoFrom = game.diorama.active;
+    game.diorama.switchTo('defense');
+  }
+  if (ev.list.some((e) => e.cat === 'night') && autoFrom) {
+    const back = autoFrom;
+    autoFrom = null;
+    clearTimeout(autoBack);
+    autoBack = setTimeout(() => { if (game.diorama.active === 'defense' && game.state.phase === 'day') game.diorama.switchTo(back); }, 4000);
+  }
+}
+
 game.fullscreen = () => {
   if (document.fullscreenElement) document.exitFullscreen?.();
   else document.documentElement.requestFullscreen?.().catch(() => game.ui.toast('attention', 'Full screen is not available in this browser.', { force: true }));
@@ -220,6 +246,8 @@ function begin(state, fresh) {
   game.ui = new UI(game);
   game.applySettings();
   game.applyIdentity();
+  game.ui.markView(game.diorama.active);
+  if (state.ui.view && state.ui.view !== 'village') game.diorama.switchTo(state.phase === 'night' ? 'defense' : state.ui.view, { instant: true });
   running = true;
   if (!fresh) runCatchUp(true);
   bump();
@@ -281,7 +309,11 @@ function showTooltip(id, e) {
   const s = game.state;
   let title = '';
   let line = '';
-  if (id.startsWith('spawn:')) {
+  if (id.startsWith('loc:')) {
+    const l = LOCATIONS.find((x) => `loc:${x.id}` === id);
+    title = l.name || s.village.name;
+    line = l.kind === 'home' ? 'Your village.' : l.difficulty ? `Danger ${l.difficulty} of 5.` : 'A friendly village.';
+  } else if (id.startsWith('spawn:')) {
     const sp = SPAWNS.find((x) => `spawn:${x.id}` === id);
     const n = s.battle ? s.battle.n : s.night;
     title = sp.name;
@@ -301,7 +333,8 @@ function showTooltip(id, e) {
 function boot() {
   const canvas = document.getElementById('scene');
   try {
-    game.diorama = new Diorama(canvas, {
+    game.diorama = new Stage(canvas, {
+      onView: (name) => game.ui?.markView(name),
       onSelect: (id) => game.ui?.select(id),
       onHover: (id, e) => showTooltip(id, e),
       onFx: (kind) => { if (!document.hidden && game.state && !game.state.paused) sound(kind); },

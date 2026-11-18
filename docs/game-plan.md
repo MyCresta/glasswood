@@ -1,9 +1,11 @@
 # Asterwake
-## Browser game requirements and implementation plan (revision 2)
+## Browser game requirements and implementation plan (revision 3)
 
 **Working title:** Asterwake. It still fits a village that wakes under strange stars, but the title is open for review (section 19).
 
 **Confirmed direction:** An idle tower defense game in a fantasy setting. The whole village is the tower. Its buildings are already in place and are unlocked, levelled and managed rather than built on a grid. Enemies come from fixed spawn points around the village, and the player can build mazes in the surrounding field to lengthen their route.
+
+**What changed in revision 3:** The game is now presented in three views: the Village view (close up, where buildings and villagers are managed), the Defence view (zoomed far out over a wide landscape, where the tower defence plays out), and the World view (a larger map of villages, ruins and dungeons for expeditions and character combat). The archers now stand on a large Great Tower at the centre of the village. The village sits on the ground in a forest clearing, not on a floating island.
 
 **What changed from revision 1:** Revision 1 turned into a grid-based space colony builder and lost the tower defense focus. This revision removes plot grids, free building placement, power networks, multiple colonies, ships, shipping routes, alien factions and eras. Villagers with traits and a research tree carry over. The only grid in the game is the battlefield around the village, and it exists purely for mazes.
 
@@ -40,29 +42,43 @@ There is no mandatory ending. Night milestones, boss nights and village developm
 
 ## 3. Visual identity and atmosphere
 
-### 3.1 The village
+### 3.1 Three views
 
-The village is a hand-designed miniature on a floating island or a clearing, depending on the chosen art direction (section 19). Every building has a fixed, deliberately composed spot: the Town Hall on the square, the Blacksmith by the stream, the Mage Tower on the rise, farm fields on the gentle slope. Paths, fences, gardens, washing lines, lanterns and props connect them. Nothing about the layout looks procedurally scattered.
+The game is seen through three views of the same world. The player switches with tabs at the top of the screen (keys 1, 2 and 3). By default the game moves to the Defence view at nightfall and back at dawn, which the player can turn off.
 
-Locked buildings are visible from the start as ruins, overgrown foundations or boarded-up shells. Restoring a building plays a short construction moment. Each level visibly changes it: new storeys, chimneys, banners, better roofing, warmer lights, more activity around it. A level 10 Blacksmith should look like a proud workshop, not a slightly bigger shed.
+| View | What it shows | What the player does there |
+| --- | --- | --- |
+| Village | The village up close in its forest clearing, with the Great Tower at its heart | Restore, level and manage buildings; later, manage villagers, assignments and gear |
+| Defence | The village small at the centre of a wide fantasy landscape of forest, hills, a lake and distant mountains, with no other settlements nearby | Watch the nights, read routes and spawn points, build mazes (Milestone 2), set targeting |
+| World | A much larger map with neighbouring villages, ruins, dungeons and wild places, linked by trails | Plan and follow expeditions and watch the characters' battles (Milestone 6) |
 
-Villagers walk between home, work and the walls. At dusk they light lanterns and defenders climb onto the walls; at dawn they come back down.
+### 3.2 The village (Village view)
 
-### 3.2 The battlefield
+The village is a hand-designed miniature in a clearing. The **Great Tower** rises from the centre: it is where the archers stand and the village's main weapon. Every other building has a fixed, deliberately composed spot around the plaza, such as the Town Hall by the gate, the Blacksmith on the west side and the Mage Tower on the rise. Paths, fences, gardens, washing lines, lanterns and props connect them. Nothing about the layout looks procedurally scattered.
 
-Around the village lies the approach: meadows, forest edges, rocks and old roads, divided into a subtle tile grid that only becomes visible in maze-placement mode. Spawn points are recognisable landmarks such as a dark forest path, a cave mouth, a ruined gate or a mist-filled ravine. Before a night they show a faint glow and a preview of the enemies coming from them.
+Locked buildings are visible from the start as ruins, overgrown foundations or boarded-up shells. Restoring a building plays a short construction moment. Each level visibly changes it: new storeys, chimneys, banners, better roofing, warmer lights, more activity around it. A level 10 Blacksmith should look like a proud workshop, not a slightly bigger shed. The Great Tower grows taller and gains a balcony, banners, more archers and finally a golden roof.
 
-Enemies are readable at a glance through silhouette, colour and movement: scurrying goblins, loping wolves, heavy brutes, fluttering bats. Projectiles, spells, hits and deaths have clear, satisfying feedback without visual noise. Damage numbers are optional.
+Villagers walk between home, work and the walls. At dusk they light lanterns and go indoors or up onto the walls; at dawn they come back out.
 
-### 3.3 Day and night
+### 3.3 The battlefield (Defence view)
+
+Seen from far above, the village is small and the Great Tower stands out at its centre. Around it lies the approach: a wide meadow with rocks and thickets, ringed by dense forest, with hills, a lake and mountains on the horizon. The meadow is divided into a subtle tile grid that only becomes visible in maze-placement mode. Spawn points are recognisable landmarks at the forest's edge, such as old stone arches and mossy caves. Before a night they glow and the routes enemies will take are shown.
+
+Enemies are miniature, in scale with the village, and readable at a glance through silhouette, colour and movement: scurrying goblins, loping wolves, heavy brutes, fluttering bats. When zoomed out, small coloured markers keep them easy to follow. Projectiles, spells, hits and deaths have clear, satisfying feedback without visual noise.
+
+### 3.4 The wider world (World view)
+
+A larger map with coast, forests, a river, a lake and mountains to the north. The home village sits in the middle. Around it are friendly villages (recruits, trade, rumours), ruins (relics, recipes), dungeons (monster materials, rare recipes) and wild places, each with a name, danger rating, journey time and typical rewards. Dotted trails show the roads. Expeditions travel these trails, and their encounters play out on the map as small battles between the party and what they meet (section 11).
+
+### 3.5 Day and night
 
 Day is bright and calm. Dusk is the transition and the cue to prepare. Night is darker and moodier, but the battlefield must stay readable: lit windows and torches on the walls, glowing enemy eyes and clearly coloured projectiles. Dawn brings a short celebratory moment and the night's rewards.
 
-### 3.4 Camera
+### 3.6 Camera
 
-The default view shows the whole village and the near battlefield. The player can pan, zoom, rotate within limits, focus on a building, and return to the default view. A clean viewing mode hides most of the interface. During placement, the camera tilts towards a more top-down view so that paths are easy to read.
+Each view has its own camera with a sensible default. The player can pan, zoom, rotate within limits, focus on a building or place, and return to the default view. A clean viewing mode hides most of the interface. During placement, the camera tilts towards a more top-down view so that paths are easy to read.
 
-### 3.5 Readability and sound
+### 3.7 Readability and sound
 
 The interface uses warm parchment and wood tones, kept quiet so that the scene stays the star. Resources always use the same icon and colour. Status is always also conveyed by text or symbols. Music is gentle by day and tense but not stressful by night. Hits, kills, wall damage, level-ups, crafting and dawn have short, distinct sounds. Master, music, ambience and interface volume are separate. Reduced motion and reduced flashing settings are supported.
 
@@ -70,9 +86,9 @@ The interface uses warm parchment and wood tones, kept quiet so that the scene s
 
 The player names the village and chooses a banner (emblem and colour). Defaults allow immediate play.
 
-The village starts with the Town Hall, Walls, Archery Tower, Farmstead and Lumber Camp restored at level 1, and three villagers: an Archer, a Farmer and a Woodcutter. The opening stock is 150 Gold, 100 Food, 80 Timber and 40 Stone. Every other building is visible as a ruin with its restoration requirement shown.
+The village starts with the Town Hall, Walls, Great Tower, Farmstead and Lumber Camp restored at level 1, and three villagers: an Archer, a Farmer and a Woodcutter. The opening stock is 150 Gold, 100 Food, 80 Timber and 40 Stone. Every other building is visible as a ruin with its restoration requirement shown.
 
-Night 1 begins after a short first day of about two minutes. It is gentle enough to be won with no player action, so the player sees the defence working before having to understand it. A short, dismissible guide covers selecting a building, reading a night preview, levelling the Archery Tower, placing the first barricade, restoring the Blacksmith and equipping a defender.
+Night 1 begins after a short first day of about two minutes. It is gentle enough to be won with no player action, so the player sees the defence working before having to understand it. A short, dismissible guide covers selecting a building, reading a night preview, levelling the Great Tower, placing the first barricade, restoring the Blacksmith and equipping a defender.
 
 Pacing targets:
 - First meaningful upgrade affordable within 2 minutes.
@@ -136,7 +152,7 @@ Monster materials come in tiers that follow enemy families, for example Goblin S
 | --- | --- | --- | --- | --- |
 | Town Hall | Restored | — | The heart of the village. Sets building level caps, holds the village banner and stores basic goods | Raises level caps, unlocks building restorations, small integrity bonus |
 | Walls & Gate | Restored | — | Village integrity (the "tower HP") and defender wall posts | Integrity, armour, wall posts (2 → 6), integrity regeneration by day |
-| Archery Tower | Restored | — | Main single-target ranged attack | Damage, attack speed, range; level 5 double shot, level 10 piercing arrows |
+| Great Tower | Restored | — | The tall tower at the centre: archers and main single-target ranged attack | Damage, attack speed, range; level 5 double shot, level 10 piercing arrows |
 | Farmstead | Restored | — | Food (4/min at level 1) | Output ×1.25 per level, extra fields and animals appear |
 | Lumber Camp | Restored | — | Timber (6/min) | Output |
 | Quarry | Ruin | Night 2 | Stone (5/min) | Output |
@@ -177,7 +193,7 @@ All attacks come from the village itself:
 
 | Source | Style | Notes |
 | --- | --- | --- |
-| Archery Tower | Fast single target, good range | Backbone of the defence. Targeting priority can be set: closest to walls, strongest, fastest, flyers first |
+| Great Tower archers | Fast single target, good range | Backbone of the defence. Targeting priority can be set: closest to walls, strongest, fastest, flyers first |
 | Defenders on wall posts | One attack per assigned villager | Their damage and style come from profession, level and gear: bows (range), spears (short range, high damage), staves (small splash) |
 | Mage Tower spells | Area damage and slows on cooldowns | Spells auto-cast. The player can set preferences (save frost for brutes, for example) |
 | Ballista (Workshop add-on) | Slow, very heavy single shot | Strong against brutes and bosses |
@@ -249,7 +265,7 @@ Every villager has a name, portrait, appearance, profession, level, experience, 
 | Miner | Iron and gems | Mine |
 | Smith | Crafting speed and quality | Blacksmith, Workshop |
 | Scholar | Knowledge and spells | Library, Mage Tower |
-| Archer | Ranged defence | Archery Tower, wall posts, expeditions |
+| Archer | Ranged defence | Great Tower, wall posts, expeditions |
 | Guard | Close defence, toughness | Wall posts, expeditions |
 
 Any villager can do any job; a matching profession adds a bonus (+10%, +2% per level above 1, up to level 20). Experience: 4 per minute of useful work or per night spent defending; each level needs 20 × the current level. Retraining costs Knowledge and keeps experience in each profession.
@@ -295,16 +311,17 @@ Wellbeing states: comfortable, hungry (Food ran out), recovering (after a lost n
 
 Gear is a big part of how the village scales, but building levels and research matter at least as much, so no single system is mandatory to keep progressing.
 
-## 11. Expeditions
+## 11. Expeditions and character combat (World view)
 
-Formed at the Tavern, expeditions are the village's window to the wider world, without turning it into a second game:
+Formed at the Tavern and played out in the World view, expeditions are the village's window to the wider world:
 
-- A **region map** shows locations around the village (Whispering Woods, Old Quarry, Sunken Chapel, Troll Bridge and others) with difficulty, duration (5 to 60 minutes), expected rewards and risk.
-- A party of 1 to 4 villagers goes out with their gear. Party power (from levels, gear and traits) against location difficulty decides the result, and the forecast shows the odds before departure.
-- Results: materials, Gold, recipes, recruits (rescued travellers join the candidate list), lore, and occasionally a new region or a spawn-point secret, such as learning that a spawn point can be partly sealed for a few nights.
-- Setbacks: fewer rewards and villagers *recovering* for a while. Never death or lost gear.
+- The **World view** shows locations around the village (friendly villages, ruins, dungeons and wild places such as Whispering Woods, Old Quarry, Sunken Chapel and Troll Bridge) with danger, journey time, expected rewards and risk.
+- A party of 1 to 4 villagers sets out with their gear and visibly travels the trails on the map.
+- **Combat:** at the destination, and sometimes on the road, the party meets enemies. Battles are shown on the map as small automatic fights between the characters and what they meet, in the same miniature style as the Defence view. Each character fights according to profession, level, gear and traits. The player can watch and make a few simple decisions, such as pressing on or retreating, using a consumable, or choosing a target to focus. A battle never requires quick reactions, and the forecast shows the odds before departure.
+- Results: materials, Gold, recipes, recruits (from friendly villages or rescued travellers), lore, and occasionally a new place or a spawn-point secret, such as learning that a spawn point can be partly sealed for a few nights.
+- Setbacks: retreating with fewer rewards and villagers *recovering* for a while. Never death or lost gear.
 - Villagers on an expedition can't work or defend until they return, which is the real cost of sending them.
-- Expeditions continue offline.
+- Expeditions continue offline. Battles while the player is away are resolved with the same rules and summarised on return, and they never escalate into a loss the player could not have seen coming.
 
 ## 12. Research (the Library)
 
@@ -336,11 +353,13 @@ At most three unresolved events wait at a time. Events never block production or
 
 Principal views:
 
-- **Village:** the scene, the resource bar, the day and night timer, integrity, the next-night preview, and building selection.
-- **Battlefield / maze mode:** the grid, maze budget, piece palette, live path preview per spawn point, and layout presets.
+- **Village view:** the village up close; building selection and management, and later villagers.
+- **Defence view:** the battlefield; integrity, routes, spawn points, and maze mode (the grid, maze budget, piece palette, live path preview per spawn point, and layout presets).
+- **World view:** the wider map; places, expeditions and character battles.
+- The resource bar, the day and night timer, the next-night preview and the view tabs are always visible.
 - **Villagers:** roster, assignments, wall posts, gear overview.
 - **Building screens:** the Blacksmith, Tavern and others, each opened from the building itself.
-- **Research, Expeditions** (region map), **Log, Settings, Help.**
+- **Research, Log, Settings, Help.**
 
 During a night, the HUD adds integrity, enemies remaining per spawn point, active spells with cooldowns, and a speed control (×1 and ×2, proposed). Everything else from revision 1's interface rules still applies: three notification levels, grouped completions, exact numbers on inspection, explained blockers, visible keyboard focus, scalable text, and large touch targets.
 
@@ -375,7 +394,7 @@ A second battlefield map, a different village site with its own layout and spawn
 Each milestone is a playable game, and the tower defense comes first.
 
 ### Milestone 1: The village holds the line
-The preplaced village diorama with the starting buildings, integrity, the Archery Tower, the day and night cycle, one spawn point, Goblins and Wolves, night scaling, winning and losing nights, Gold from kills, levelling the Archery Tower and Walls, and saving.
+The three views (Village, Defence, and a World map with its places), the preplaced village with the Great Tower with the starting buildings, integrity, the Great Tower, the day and night cycle, one spawn point, Goblins and Wolves, night scaling, winning and losing nights, Gold from kills, levelling the Great Tower and Walls, and saving.
 *Complete when* the player can watch a night play out, upgrade between nights, eventually lose a night, recover, and come back to the same village later.
 
 ### Milestone 2: Mazes
@@ -395,7 +414,7 @@ The Library, the research tree, the Mage Tower with spells, the Ballista, tar pi
 *Complete when* different defence builds (arrow-heavy, spell-heavy, maze-heavy) are viable.
 
 ### Milestone 6: Expeditions
-The region map, parties, forecasts, results, setbacks, recipes and recruits from expeditions, and offline expeditions.
+Parties setting out from the Tavern and travelling the World view, character combat on the map with simple player decisions, forecasts, results, setbacks, recipes and recruits from expeditions, and offline expeditions.
 *Complete when* sending villagers out is a real trade-off against keeping them on the walls.
 
 ### Milestone 7: Depth and stories
@@ -412,13 +431,12 @@ Full visual and audio polish across day and night, phone layouts for maze mode, 
 3. **Spawn points versus all sides:** This plan uses six fixed spawn points that open over time, so that mazes stay readable. True "from any edge" spawning makes mazes much harder to plan.
 4. **Wall posts and day jobs:** Here defenders keep their day jobs. Making them full-time soldiers creates a sharper economy-versus-defence trade-off.
 5. **Should anything outside the village shoot?** Here only the village attacks, and the maze holds only barriers and traps. Allowing a few outpost towers in the field would add strategy but dilute the "the village is the tower" idea.
-6. **Setting of the site:** A floating island (reusing the current diorama, a little magical) or a forest clearing on the ground (more grounded, easier to read as a battlefield).
-7. **Name:** Asterwake, or something more village-like, such as Lanternhold, Hearthward, Emberfield or The Long Night. These are suggestions; availability has not been checked.
+6. **Name:** Asterwake, or something more village-like, such as Lanternhold, Hearthward, Emberfield or The Long Night. These are suggestions; availability has not been checked.
 
 ## 20. Relationship to the current prototype
 
 The Milestone 1–2 build from revision 1 is not wasted, but its core building model is replaced:
 
-- **Keep:** the save, backup, export/import and two-tab lock; offline catch-up and the return summary; the research bank and queue; villagers' portraits, traits, experience and roster screens; the toast, modal, settings, help and keyboard framework; the day/night lighting, sky, island terrain, decoration and camera; the audio engine; the test setup and GitHub Pages deployment.
+- **Keep:** the save, backup, export/import and two-tab lock; offline catch-up and the return summary; the research bank and queue; villagers' portraits, traits, experience and roster screens; the toast, modal, settings, help and keyboard framework; the day/night lighting, sky and camera; the audio engine; the test setup and GitHub Pages deployment.
 - **Replace:** the plot grid, free placement, relocation and demolition; the power network; the generic building catalog (with the hand-composed village and building screens); and the space theme in models and text (with fantasy art).
 - **New:** the battlefield grid and flow-field pathfinding, the enemy and projectile simulation, integrity, spawn points, maze placement with path preview, and wave scaling. This is the heart of Milestones 1 and 2.

@@ -78,8 +78,8 @@ export function setTargeting(state, mode) {
 
 export const OBJECTIVES = [
   { id: 'select', title: 'Look around the village', guide: 'Select a building in the scene, or press Tab and Enter, to see what it does.', check: (s) => s.objectives.flags.selected },
-  { id: 'night1', title: 'Survive the first night', guide: 'When the day ends, goblins come from the Hollow Gate in the north. The archers fight on their own; watch them work.', check: (s) => s.best >= 1, reward: 20 },
-  { id: 'archery2', title: 'Train the archers', guide: 'Select the Archery Tower and upgrade it. Each level adds 30% damage and a little range.', check: (s) => s.buildings.archery.level >= 2, reward: 30 },
+  { id: 'night1', title: 'Survive the first night', guide: 'When the day ends, goblins come from the Hollow Gate in the north. The view zooms out to the battlefield and the tower’s archers fight on their own.', check: (s) => s.best >= 1, reward: 20 },
+  { id: 'archery2', title: 'Train the archers', guide: 'Select the Great Tower in the middle of the village and upgrade it. Each level adds 30% damage and a little range.', check: (s) => s.buildings.archery.level >= 2, reward: 30 },
   { id: 'walls2', title: 'Strengthen the walls', guide: 'Upgrade the Walls & Gate for more integrity and armour against every hit.', check: (s) => s.buildings.walls.level >= 2, reward: 30 },
   { id: 'townhall2', title: 'Grow the Town Hall', guide: 'Buildings can reach twice the Town Hall’s level. Raise it to level 2 to keep improving.', check: (s) => s.buildings.townhall.level >= 2, reward: 60 },
   { id: 'night5', title: 'Hold until night 5', guide: 'On night 5 the Mossy Cave in the west opens and enemies come from two sides.', check: (s) => s.best >= 5, reward: 60 },

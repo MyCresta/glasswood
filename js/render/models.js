@@ -2,7 +2,7 @@
 // geometry. Every group sits on y = 0; `userData.anims` lists moving parts.
 import * as THREE from 'three';
 import { G, add, finalize, seeded, mergeColored } from './kit.js';
-import { WALL_R, BUILDINGS } from '../data/village.js';
+import { VIEW_WALL_R as WALL_R, BUILDINGS } from '../data/village.js';
 
 const TAU = Math.PI * 2;
 
@@ -10,7 +10,7 @@ function windowPane(g, M, x, y, z, ry = 0, w = 0.16, h = 0.2) {
   add(g, G.rbox(w, h, 0.04, 0.02), M.window, x, y, z, { rot: [0, ry, 0], cast: false });
 }
 
-function torch(g, M, x, y, z) {
+export function torch(g, M, x, y, z) {
   add(g, G.cyl(0.02, 0.025, 0.22, 6), M.timber, x, y, z);
   add(g, G.sph(0.045, 8, 6), M.torch, x, y + 0.14, z, { cast: false });
 }
@@ -22,7 +22,7 @@ function flag(g, M, anims, x, y, z, h = 0.6) {
 }
 
 // A timber-framed house body with gable roof. Returns height of the eaves.
-function house(g, M, { w = 1.2, d = 1, h = 0.7, x = 0, z = 0, ry = 0, roof = M.roofRed, wall = M.plaster, base = M.stone, roofH = 0.55 } = {}) {
+export function house(g, M, { w = 1.2, d = 1, h = 0.7, x = 0, z = 0, ry = 0, roof = M.roofRed, wall = M.plaster, base = M.stone, roofH = 0.55 } = {}) {
   const grp = new THREE.Group();
   grp.position.set(x, 0, z);
   grp.rotation.y = ry;
@@ -75,40 +75,58 @@ function townhall(M, lv) {
   return { g, anims };
 }
 
-function archery(M, lv) {
+function greatTower(M, lv) {
   const g = new THREE.Group();
   const anims = [];
-  const H = 2.0 + Math.min(lv, 10) * 0.08;
-  add(g, G.cyl(0.62, 0.7, 0.2, 20), M.stoneDark, 0, 0.1, 0);
-  add(g, G.cyl(0.5, 0.58, H, 20), M.stone, 0, H / 2 + 0.1, 0);
-  for (let i = 0; i < 4; i++) { const a = (i / 4) * TAU + 0.4; add(g, G.rbox(0.09, 0.2, 0.04, 0.015), M.dark, Math.cos(a) * 0.53, 0.7 + i * 0.32, Math.sin(a) * 0.53, { rot: [0, -a + Math.PI / 2, 0] }); }
-  // platform + crenellations
-  add(g, G.cyl(0.72, 0.62, 0.16, 20), M.wood, 0, H + 0.18, 0);
-  for (let i = 0; i < 10; i++) { const a = (i / 10) * TAU; add(g, G.rbox(0.16, 0.2, 0.1, 0.02), M.stone, Math.cos(a) * 0.66, H + 0.36, Math.sin(a) * 0.66, { rot: [0, -a, 0] }); }
+  const H = 4.0 + Math.min(lv, 10) * 0.12;
+  // plaza ring and foundation
+  add(g, G.cyl(1.55, 1.6, 0.12, 32), M.stoneDark, 0, 0.06, 0, { cast: false });
+  add(g, G.cyl(1.15, 1.3, 0.5, 24), M.stone, 0, 0.3, 0);
+  add(g, G.cyl(0.88, 1.05, H, 24), M.stone, 0, H / 2 + 0.5, 0);
+  // banding and arrow slits
+  for (const y of [1.4, 2.6, 3.6]) add(g, G.torus(0.94 - y * 0.02, 0.05, 6, 28), M.stoneDark, 0, y, 0, { rot: [Math.PI / 2, 0, 0] });
+  for (let i = 0; i < 9; i++) { const a = (i / 9) * TAU + i * 0.7; const y = 1.0 + (i % 3) * 1.1 + (i > 5 ? 0.35 : 0); const r = 0.99 - y * 0.03; add(g, G.rbox(0.08, 0.28, 0.06, 0.02), M.window, Math.cos(a) * r, y, Math.sin(a) * r, { rot: [0, -a + Math.PI / 2, 0], cast: false }); }
+  // door
+  add(g, G.rbox(0.5, 0.75, 0.12, 0.08), M.timber, 0, 0.88, 1.03);
+  add(g, G.torus(0.25, 0.05, 6, 16, Math.PI), M.stoneDark, 0, 1.25, 1.04);
+  // mid balcony from level 3
+  if (lv >= 3) {
+    add(g, G.cyl(1.12, 1.0, 0.12, 24), M.wood, 0, H * 0.55 + 0.5, 0);
+    for (let i = 0; i < 16; i++) { const a = (i / 16) * TAU; add(g, G.cyl(0.02, 0.02, 0.22, 4), M.timber, Math.cos(a) * 1.08, H * 0.55 + 0.67, Math.sin(a) * 1.08); }
+  }
+  // top platform with crenellations
+  const top = H + 0.5;
+  add(g, G.cyl(1.25, 0.95, 0.3, 24), M.stone, 0, top + 0.1, 0);
+  for (let i = 0; i < 14; i++) { const a = (i / 14) * TAU; add(g, G.rbox(0.26, 0.32, 0.16, 0.03), M.stone, Math.cos(a) * 1.14, top + 0.42, Math.sin(a) * 1.14, { rot: [0, -a, 0] }); }
   // roof on posts
-  for (let i = 0; i < 4; i++) { const a = (i / 4) * TAU + Math.PI / 4; add(g, G.cyl(0.025, 0.025, 0.65, 6), M.timber, Math.cos(a) * 0.5, H + 0.55, Math.sin(a) * 0.5); }
-  add(g, G.cone(0.85, 0.65, 16), lv >= 10 ? M.gold : M.roofRed, 0, H + 1.18, 0);
-  flag(g, M, anims, 0, H + 1.45, 0, 0.45);
-  // archers on top
-  const archers = 1 + Math.floor(lv / 3);
+  for (let i = 0; i < 6; i++) { const a = (i / 6) * TAU + 0.3; add(g, G.cyl(0.04, 0.04, 1.0, 6), M.timber, Math.cos(a) * 0.82, top + 0.75, Math.sin(a) * 0.82); }
+  add(g, G.cone(1.35, 1.25, 18), lv >= 10 ? M.gold : M.roofRed, 0, top + 1.85, 0);
+  if (lv >= 7) add(g, G.cone(0.08, 0.35, 8), M.gold, 0, top + 2.62, 0);
+  flag(g, M, anims, 0, top + 2.4, 0, 0.7);
+  for (const a of [0.4, 2.5, 4.6]) {
+    if (lv < 2 && a !== 0.4) continue;
+    const bx = Math.cos(a) * 0.92, bz = Math.sin(a) * 0.92;
+    add(g, G.rbox(0.3, 0.75, 0.02, 0.01), M.accent, bx, H * 0.75, bz, { rot: [0, -a + Math.PI / 2, 0] });
+  }
+  // archers on the platform
+  const archers = 2 + Math.floor(lv / 2);
   for (let i = 0; i < archers; i++) {
     const a = (i / archers) * TAU - Math.PI / 2;
     const p = new THREE.Group();
-    p.position.set(Math.cos(a) * 0.32, H + 0.26, Math.sin(a) * 0.32);
-    add(p, G.cap(0.07, 0.12, 4, 8), M.leafDark, 0, 0.13, 0);
-    add(p, G.sph(0.065, 10, 8), M.plasterWarm, 0, 0.3, 0);
-    add(p, G.torus(0.11, 0.008, 4, 12, Math.PI), M.timber, 0.09, 0.2, 0, { rot: [0, Math.PI / 2, Math.PI / 2] });
+    p.position.set(Math.cos(a) * 0.62, top + 0.25, Math.sin(a) * 0.62);
+    add(p, G.cap(0.09, 0.14, 4, 8), M.leafDark, 0, 0.16, 0);
+    add(p, G.sph(0.08, 10, 8), M.plasterWarm, 0, 0.37, 0);
+    add(p, G.torus(0.14, 0.01, 4, 12, Math.PI), M.timber, 0.11, 0.25, 0, { rot: [0, Math.PI / 2, Math.PI / 2] });
     p.userData.dynamic = true;
     g.add(p);
     anims.push({ obj: p, type: 'archer', phase: i * 1.7 });
   }
-  // practice yard
-  add(g, G.cyl(0.18, 0.18, 0.04, 16), M.hay, 0.95, 0.3, 0.2, { rot: [Math.PI / 2, 0, 0.3] });
-  add(g, G.cyl(0.03, 0.03, 0.35, 6), M.timber, 0.95, 0.15, 0.18);
-  add(g, G.cyl(0.2, 0.22, 0.3, 12), M.hay, -0.85, 0.15, 0.45);
-  if (lv >= 3) torch(g, M, 0.62, 0.9, 0.3);
-  if (lv >= 6) add(g, G.rbox(0.18, 0.5, 0.02, 0.01), M.accent, 0, H * 0.55, 0.57);
-  return { g, anims, top: H + 0.4 };
+  // torches by the door and a training yard
+  torch(g, M, 0.42, 1.05, 1.08);
+  torch(g, M, -0.42, 1.05, 1.08);
+  add(g, G.cyl(0.18, 0.18, 0.04, 16), M.hay, 1.45, 0.32, 0.6, { rot: [Math.PI / 2, 0, 0.6] });
+  add(g, G.cyl(0.03, 0.03, 0.35, 6), M.timber, 1.45, 0.17, 0.58);
+  return { g, anims, top: top + 0.3 };
 }
 
 function farmstead(M, lv) {
@@ -151,7 +169,7 @@ function lumber(M, lv) {
   return { g, anims };
 }
 
-function ruin(M, id) {
+export function ruin(M, id) {
   const r = seeded([...id].reduce((a, c) => a * 31 + c.charCodeAt(0), 7));
   const g = new THREE.Group();
   const anims = [];
@@ -185,7 +203,7 @@ function watchtowerRuin(M) {
   return { g, anims: [] };
 }
 
-const BUILDERS = { townhall, archery, farmstead, lumber };
+const BUILDERS = { townhall, archery: greatTower, farmstead, lumber };
 
 export function buildBuilding(id, level, M) {
   let res;
@@ -328,7 +346,7 @@ export function arrowGeometry() {
 }
 
 export function buildingFootprint(id) {
-  return { townhall: 1.7, archery: 0.95, farmstead: 1.35, lumber: 1.15, watchtower: 0.8 }[id] || 1.0;
+  return { townhall: 1.6, archery: 1.5, farmstead: 1.35, lumber: 1.15, watchtower: 0.8 }[id] || 1.0;
 }
 
 export { BUILDINGS };
