@@ -1,8 +1,7 @@
 // One renderer, three views. Handles switching, picking, resizing and quality.
 import * as THREE from 'three';
 import { makeMaterials } from './kit.js';
-import { VillageView } from './villageView.js';
-import { DefenseView } from './defenseView.js';
+import { LandView } from './landView.js';
 import { WorldView } from './worldView.js';
 
 export const VIEWS = ['village', 'defense', 'world'];
@@ -27,7 +26,7 @@ export class Stage {
     this.renderer = new THREE.WebGLRenderer({ canvas, antialias: true, powerPreference: 'high-performance' });
     this.renderer.outputColorSpace = THREE.SRGBColorSpace;
     this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
-    this.renderer.toneMappingExposure = 1.05;
+    this.renderer.toneMappingExposure = 1.0;
     this.renderer.shadowMap.enabled = true;
     this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
     this.M = makeMaterials(handlers.accent || '#f0a86b');
@@ -46,8 +45,12 @@ export class Stage {
 
   view(name) {
     if (!this.views[name]) {
-      const V = { village: VillageView, defense: DefenseView, world: WorldView }[name];
-      const v = new V(this.canvas, this.M, this.dot);
+      let v;
+      if (name === 'world') v = new WorldView(this.canvas, this.M, this.dot);
+      else {
+        this.land ||= new LandView(this.canvas, this.M, this.dot);
+        v = this.land.views[name];
+      }
       this.views[name] = v;
       v.rig.reducedMotion = this.reducedMotion;
       v.light.setShadows(this.quality !== 'low');
@@ -65,7 +68,7 @@ export class Stage {
     if (this.active === name) return;
     const v = this.view(name);
     for (const o of Object.values(this.views)) o.rig.controls.enabled = o === v;
-    if (name === 'defense' && this.state?.battle) v.seenFx = this.state.battle.fxId;
+    if (name !== 'world' && this.land && this.state?.battle) this.land.seenFx = this.state.battle.fxId;
     this.active = name;
     const stage = this.canvas.parentElement;
     if (!instant && !this.reducedMotion) {
@@ -107,7 +110,7 @@ export class Stage {
 
   setAccent(c) {
     this.M.accent.color.set(c);
-    this.views.defense?.setAccent(c);
+    this.land?.views.defense.setAccent(c);
   }
 
   sync(state) {

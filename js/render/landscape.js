@@ -3,12 +3,15 @@
 import * as THREE from 'three';
 import { G, seeded, noise2, mergeColored } from './kit.js';
 
+// Muted, mossy twilight palette.
 export const PAL = {
-  grass: ['#86b45f', '#9bc56a', '#719f55', '#aecd78'],
-  meadow: ['#8fb862', '#a3c46e'],
-  dirt: '#b99d74',
-  rock: '#8d7f74',
-  forestFloor: '#5f8f4c',
+  grass: ['#4d6842', '#5a7449', '#43593b', '#62794f'],
+  meadow: ['#55703f', '#61794a'],
+  dirt: '#6e5f49',
+  dirtLight: '#837054',
+  rock: '#6f6a62',
+  forestFloor: '#2b3628',
+  needles: '#3a3224',
 };
 
 // Heightfield ground. `height(x, z)` and `color(x, z, y, c)` customise it.
@@ -53,26 +56,45 @@ export function buildGround({ radius, rings = 60, segs = 180, height, color }) {
 let treeGeos = null;
 function treeGeometries() {
   if (treeGeos) return treeGeos;
+  // Irregular, slightly asymmetric shapes; darker toward the ground (fake occlusion).
+  const spruce = (tiers, lean, cols) => mergeColored([
+    { geo: G.cyl(0.05, 0.09, 0.55, 5, true), color: '#3b2c22', pos: [0, 0.27, 0] },
+    ...Array.from({ length: tiers }, (_, i) => {
+      const k = i / (tiers - 1);
+      return { geo: G.cone(0.5 - k * 0.32, 0.62 - k * 0.12, 7), color: cols[Math.min(cols.length - 1, i)], pos: [lean * k, 0.55 + i * 0.36, lean * 0.5 * k], rot: [0, i * 0.7, (i % 2 ? 0.04 : -0.03)] };
+    }),
+  ]);
   treeGeos = {
-    pine: mergeColored([
-      { geo: G.cyl(0.06, 0.09, 0.5, 5, true), color: '#7a5a43', pos: [0, 0.25, 0] },
-      { geo: G.cone(0.42, 0.62, 7), color: '#4f8b4a', pos: [0, 0.68, 0] },
-      { geo: G.cone(0.34, 0.55, 7), color: '#5a9651', pos: [0, 0.98, 0] },
-      { geo: G.cone(0.24, 0.48, 7), color: '#66a258', pos: [0, 1.26, 0] },
+    spruce: spruce(4, 0.03, ['#1f3329', '#25392d', '#2b4232', '#334a37']),
+    spruceTall: spruce(6, 0.06, ['#1c2f26', '#21362b', '#263c2f', '#2c4333', '#324a38', '#3a523d']),
+    oak: mergeColored([
+      { geo: G.cyl(0.07, 0.12, 0.7, 6, true), color: '#3a2c22', pos: [0, 0.35, 0] },
+      { geo: G.cyl(0.03, 0.05, 0.4, 5, true), color: '#3a2c22', pos: [0.15, 0.75, 0], rot: [0, 0, -0.7] },
+      { geo: G.ico(0.48, 1), color: '#2f4128', pos: [0.05, 1.0, 0], scale: [1.1, 0.85, 1] },
+      { geo: G.ico(0.34, 0), color: '#36492d', pos: [0.32, 0.9, 0.12] },
+      { geo: G.ico(0.3, 0), color: '#283a24', pos: [-0.28, 0.86, -0.1] },
     ]),
-    round: mergeColored([
-      { geo: G.cyl(0.06, 0.09, 0.6, 5, true), color: '#7a5a43', pos: [0, 0.3, 0] },
-      { geo: G.ico(0.42, 1), color: '#6fae55', pos: [0, 0.9, 0] },
-      { geo: G.ico(0.3, 0), color: '#79b85c', pos: [0.22, 0.74, 0.08] },
-      { geo: G.ico(0.27, 0), color: '#5f9e4e', pos: [-0.2, 0.8, -0.1] },
+    dead: mergeColored([
+      { geo: G.cyl(0.04, 0.08, 1.3, 5, true), color: '#4a4238', pos: [0, 0.65, 0], rot: [0.05, 0, 0.04] },
+      { geo: G.cyl(0.015, 0.03, 0.5, 4, true), color: '#4a4238', pos: [0.14, 1.0, 0], rot: [0, 0, -0.9] },
+      { geo: G.cyl(0.015, 0.03, 0.42, 4, true), color: '#4a4238', pos: [-0.12, 0.82, 0.04], rot: [0.2, 0, 1.0] },
+      { geo: G.cyl(0.012, 0.025, 0.35, 4, true), color: '#4a4238', pos: [0.05, 1.22, -0.08], rot: [-0.7, 0, 0.3] },
     ]),
     bush: mergeColored([
-      { geo: G.ico(0.25, 1), color: '#5f9e4e', pos: [0, 0.15, 0], scale: [1, 0.75, 1] },
-      { geo: G.ico(0.18, 0), color: '#6fae55', pos: [0.18, 0.12, 0.05], scale: [1, 0.75, 1] },
+      { geo: G.ico(0.25, 1), color: '#2c3f28', pos: [0, 0.15, 0], scale: [1, 0.7, 1] },
+      { geo: G.ico(0.18, 0), color: '#34492e', pos: [0.18, 0.12, 0.05], scale: [1, 0.75, 1] },
     ]),
+    fern: mergeColored(Array.from({ length: 6 }, (_, i) => ({ geo: G.cone(0.05, 0.42, 3), color: i % 2 ? '#3d5a35' : '#466640', pos: [Math.cos(i) * 0.1, 0.16, Math.sin(i) * 0.1], rot: [Math.sin(i) * 0.9, i, Math.cos(i) * 0.9] }))),
     rock: mergeColored([
-      { geo: G.ico(0.4, 1), color: '#8d7f74', pos: [0, 0.18, 0], scale: [1.1, 0.7, 1] },
-      { geo: G.ico(0.18, 0), color: '#7d6f66', pos: [0.32, 0.08, 0.1] },
+      { geo: G.ico(0.4, 1), color: '#5e5a54', pos: [0, 0.15, 0], scale: [1.15, 0.6, 1] },
+      { geo: G.ico(0.36, 1), color: '#3f5236', pos: [0.02, 0.27, 0], scale: [1.0, 0.25, 0.9] },
+      { geo: G.ico(0.17, 0), color: '#54504a', pos: [0.36, 0.06, 0.12] },
+    ]),
+    mushrooms: mergeColored([
+      ...[[0, 0], [0.1, 0.06], [-0.08, 0.07]].flatMap(([x, z], i) => [
+        { geo: G.cyl(0.015, 0.02, 0.1 + i * 0.03, 5), color: '#d8cfbf', pos: [x, 0.05 + i * 0.015, z] },
+        { geo: G.sph(0.05 - i * 0.008, 7, 4, Math.PI * 2, 0, Math.PI / 2), color: i ? '#a8463a' : '#c8a35a', pos: [x, 0.1 + i * 0.03, z] },
+      ]),
     ]),
   };
   return treeGeos;
@@ -100,10 +122,11 @@ export function buildForest(spots, { cast = true, castWithin = Infinity } = {}) 
       q.setFromAxisAngle(new THREE.Vector3(0, 1, 0), s.rot || 0);
       m.compose(new THREE.Vector3(s.x, s.y, s.z), q, new THREE.Vector3(s.s, s.s * (s.sy || 1), s.s));
       inst.setMatrixAt(i, m);
-      tint.setHSL(0.28 + (s.hue || 0) * 0.04, 0.25, 0.55 + (s.light || 0) * 0.25);
-      inst.setColorAt(i, tint.lerp(new THREE.Color('#ffffff'), 0.55));
+      const v = 0.82 + (s.light || 0) * 0.3;
+      tint.setRGB(v * (0.97 + (s.hue || 0) * 0.06), v, v * (1.03 - (s.hue || 0) * 0.06));
+      inst.setColorAt(i, tint);
     });
-    inst.castShadow = cast && kind !== 'bush';
+    inst.castShadow = cast && !['bush', 'fern', 'mushrooms'].includes(kind);
     inst.receiveShadow = true;
     group.add(inst);
   }
@@ -111,7 +134,7 @@ export function buildForest(spots, { cast = true, castWithin = Infinity } = {}) 
 }
 
 // Scatter forest spots in a ring, avoiding a keep-out test.
-export function scatterForest({ seed, rMin, rMax, count, height, avoid, clump = 0.55, scale = [0.9, 1.6], kinds = ['pine', 'round'] }) {
+export function scatterForest({ seed, rMin, rMax, count, height, avoid, clump = 0.55, scale = [0.9, 1.6], kinds = ['spruce', 'spruce', 'spruceTall', 'oak', 'spruce', 'dead'] }) {
   const rnd = seeded(seed);
   const n2 = noise2(seed + 5);
   const spots = [];
@@ -132,8 +155,8 @@ export function scatterForest({ seed, rMin, rMax, count, height, avoid, clump = 
 export function buildMountains({ seed, radius, count, height }) {
   const rnd = seeded(seed);
   const g = new THREE.Group();
-  const mat = new THREE.MeshStandardMaterial({ color: '#6f8a86', roughness: 1, flatShading: true });
-  const snow = new THREE.MeshStandardMaterial({ color: '#eef1f4', roughness: 1, flatShading: true });
+  const mat = new THREE.MeshStandardMaterial({ color: '#3e4a52', roughness: 1, flatShading: true });
+  const snow = new THREE.MeshStandardMaterial({ color: '#c9ced6', roughness: 1, flatShading: true });
   for (let i = 0; i < count; i++) {
     const a = (i / count) * Math.PI * 2 + rnd() * 0.2;
     const r = radius * (0.9 + rnd() * 0.25);
@@ -154,10 +177,32 @@ export function buildMountains({ seed, radius, count, height }) {
 }
 
 export function buildWater(shape) {
-  const mat = new THREE.MeshStandardMaterial({ color: '#6aa6c6', roughness: 0.15, metalness: 0.1, transparent: true, opacity: 0.88 });
+  const mat = new THREE.MeshStandardMaterial({ color: '#2b4250', roughness: 0.12, metalness: 0.35, transparent: true, opacity: 0.92 });
   const mesh = new THREE.Mesh(shape, mat);
   mesh.receiveShadow = true;
   return mesh;
 }
 
 export { seeded, noise2 };
+
+// A square, finely subdivided patch of ground (for paths that need detail).
+export function buildPatch({ size, step, height, color }) {
+  const n = Math.round(size / step);
+  const geo = new THREE.PlaneGeometry(size, size, n, n);
+  geo.rotateX(-Math.PI / 2);
+  const pos = geo.attributes.position;
+  const col = new Float32Array(pos.count * 3);
+  const c = new THREE.Color();
+  for (let i = 0; i < pos.count; i++) {
+    const x = pos.getX(i), z = pos.getZ(i);
+    const y = height(x, z);
+    pos.setY(i, y);
+    color(x, z, y, c);
+    col[i * 3] = c.r; col[i * 3 + 1] = c.g; col[i * 3 + 2] = c.b;
+  }
+  geo.setAttribute('color', new THREE.BufferAttribute(col, 3));
+  geo.computeVertexNormals();
+  const mesh = new THREE.Mesh(geo, new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.97 }));
+  mesh.receiveShadow = true;
+  return mesh;
+}

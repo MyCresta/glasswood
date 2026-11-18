@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { newGame } from '../js/sim/state.js';
-import { defaultField, buildFlowField, routeFrom, spawnPos, TERRAIN } from '../js/sim/map.js';
+import { defaultField, buildFlowField, routeFrom, spawnPos, TERRAIN, cellCenter } from '../js/sim/map.js';
 import { SPAWNS, wallStats, archeryStats, DAY_LENGTH } from '../js/data/village.js';
 import { makeEvents, advance, tick, catchUp, callNight, pump } from '../js/sim/time.js';
 import { waveSchedule, waveComposition, safeNight, activeSpawns } from '../js/sim/battle.js';
@@ -27,13 +27,25 @@ test('every spawn point has a route to the walls', () => {
   }
 });
 
-test('obstacles lengthen routes (groundwork for mazes)', () => {
+test('every walkable cell connects to the village', () => {
+  const f = defaultField();
+  let free = 0, reached = 0;
+  for (let k = 0; k < TERRAIN.length; k++) if (TERRAIN[k] === 0) { free++; if (isFinite(f.dist[k])) reached++; }
+  assert.equal(reached, free);
+});
+
+test('blocking a path reroutes enemies through a loop', () => {
   const tiles = TERRAIN.slice();
   const [x, z] = spawnPos(SPAWNS[0]);
   const before = routeFrom(buildFlowField(tiles), x, z).length;
-  for (let i = 14; i <= 38; i++) if (tiles[9 * 53 + i] === 0) tiles[9 * 53 + i] = 4;
+  // barricade the northern path between its two junctions
+  for (let k = 0; k < tiles.length; k++) {
+    const [cx, cz] = cellCenter(k % 53, (k / 53) | 0);
+    if (tiles[k] === 0 && Math.hypot(cx - 0.5, cz + 10.6) < 1.7) tiles[k] = 4;
+  }
   const after = routeFrom(buildFlowField(tiles), x, z).length;
-  assert.ok(after > before, `route ${before.toFixed(1)} → ${after.toFixed(1)}`);
+  assert.ok(isFinite(after), 'still a way through');
+  assert.ok(after > before + 2, `route ${before.toFixed(1)} → ${after.toFixed(1)}`);
 });
 
 test('starting state', () => {

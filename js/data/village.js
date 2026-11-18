@@ -20,16 +20,35 @@ export const OFFLINE_REWARD = 0.75;
 export const OFFLINE_CYCLE = 180; // assumed seconds per day+night while away
 export const START_GOLD = 150;
 
-// Hand-placed spawn points (angle in degrees: 0 = east, -90 = north/top of the default view).
+// Hand-placed spawn points deep in the forest, each at the end of a path.
 export const SPAWNS = [
-  { id: 'hollow', name: 'Hollow Gate', angle: -90, opens: 1, blurb: 'An old stone arch in the northern woods, its doorway full of moving dark.' },
-  { id: 'moss', name: 'Mossy Cave', angle: 150, opens: 5, blurb: 'A cave mouth on the western slope. Something breathes inside.' },
-  { id: 'ravine', name: 'Ravine Stair', angle: 30, opens: 12, blurb: 'Steps cut into the eastern ravine, worn by many feet that were not human.' },
-  { id: 'kingsroad', name: 'Old King’s Road', angle: -150, opens: 18, blurb: 'The overgrown road from a kingdom nobody remembers.' },
-  { id: 'bog', name: 'Bog Mouth', angle: -30, opens: 24, blurb: 'A sinkhole in the north-eastern fen that bubbles at dusk.' },
-  { id: 'arch', name: 'Sunken Arch', angle: 90, opens: 30, blurb: 'Half-buried ruins south of the gate, quiet for now.' },
+  { id: 'hollow', name: 'Hollow Gate', pos: [0, -20.4], opens: 1, blurb: 'An old stone arch at the end of the northern path, its doorway full of moving dark.' },
+  { id: 'moss', name: 'Mossy Cave', pos: [-19.6, 7], opens: 5, blurb: 'A cave mouth where the western path ends. Something breathes inside.' },
+  { id: 'ravine', name: 'Ravine Stair', pos: [19.4, 8.5], opens: 12, blurb: 'Steps cut into the eastern ravine, worn by many feet that were not human.' },
+  { id: 'kingsroad', name: 'Old King’s Road', pos: [-15, -15.5], opens: 18, blurb: 'The overgrown road from a kingdom nobody remembers.' },
+  { id: 'bog', name: 'Bog Mouth', pos: [15.5, -15], opens: 24, blurb: 'A sinkhole in the north-eastern fen that bubbles at dusk.' },
+  { id: 'arch', name: 'Sunken Arch', pos: [2, 20.6], opens: 30, blurb: 'Half-buried ruins at the end of the southern road, quiet for now.' },
 ];
-export const SPAWN_R = 20.4;
+
+// The village sits in a clearing; everything else is forest, crossed by paths.
+// Paths are polylines [x, z] with a width; links between them make loops, so
+// blocking one path later can force enemies onto another.
+export const CLEAR_R = 6.2;
+export const PATHS = [
+  { id: 'north', w: 1.8, pts: [[0, -20.4], [-2.4, -16.4], [1.6, -12.4], [-0.6, -8.8], [0, -5.6]] },
+  { id: 'west', w: 1.8, pts: [[-19.6, 7], [-15.2, 4.6], [-11.6, 6.6], [-8.2, 3.2], [-5.2, 1.8]] },
+  { id: 'east', w: 1.8, pts: [[19.4, 8.5], [15.4, 10.6], [11.2, 8.2], [8.6, 9.4], [5.4, 3.8]] },
+  { id: 'kings', w: 1.7, pts: [[-15, -15.5], [-11.2, -11.4], [-7.4, -11.8], [-5.2, -8.8], [-3.6, -5]] },
+  { id: 'bog', w: 1.7, pts: [[15.5, -15], [12.2, -10.6], [8.2, -10.8], [5.6, -6.2], [3.4, -4.8]] },
+  { id: 'south', w: 1.8, pts: [[2, 20.6], [-1.4, 16.4], [1.2, 12.4], [0, 8.6], [0, 5.8]] },
+  { id: 'link-ne', w: 1.3, pts: [[1.6, -12.4], [4.6, -14.6], [8.2, -10.8]] },
+  { id: 'link-nw', w: 1.3, pts: [[-2.4, -16.4], [-6.8, -14.6], [-11.2, -11.4]] },
+  { id: 'link-sw', w: 1.3, pts: [[-11.6, 6.6], [-8.4, 11.8], [-4.2, 14.4], [-1.4, 16.4]] },
+  { id: 'link-se', w: 1.3, pts: [[11.2, 8.2], [6.4, 13.2], [1.2, 12.4]] },
+  { id: 'ring-w', w: 1.2, pts: [[-8.2, 3.2], [-9.6, -2.6], [-5.2, -8.8]] },
+  { id: 'ring-e', w: 1.2, pts: [[8.6, 9.4], [10.4, 2.2], [9.6, -4.2], [8.2, -10.8]] },
+];
+export const LAKE = { x: 14.6, z: -1.8, r: 2.9 };
 
 export const ENEMIES = {
   goblin: { name: 'Goblin', plural: 'Goblins', hp: 12, speed: 0.85, dmg: 4, rate: 1.0, armor: 0, gold: 2, size: 0.22, first: 1, blurb: 'Small, numerous and greedy. They hammer at the walls with whatever they found.' },

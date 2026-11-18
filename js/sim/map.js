@@ -1,13 +1,15 @@
 // Battlefield grid, natural obstacles and flow-field pathfinding.
 // Cells are indexed i (x) and j (z); cell centre = ((i - H) * TILE, (j - H) * TILE).
-import { TILE, GRID, WALL_R, FIELD_R, SPAWNS, SPAWN_R } from '../data/village.js';
+import { TILE, GRID, WALL_R, FIELD_R, SPAWNS, PATHS, CLEAR_R, LAKE } from '../data/village.js';
 
 export const H = (GRID - 1) / 2;
 export const FREE = 0;
 export const VILLAGE = 1;
 export const OFFMAP = 2;
 export const ROCK = 3;
-export const PIECE = 4; // player maze pieces (Milestone 2)
+export const PIECE = 4; // player-placed blockers (later)
+export const FOREST = 5;
+export const WATER = 6;
 
 export const idx = (i, j) => j * GRID + i;
 export const cellCenter = (i, j) => [(i - H) * TILE, (j - H) * TILE];
@@ -15,11 +17,29 @@ export const cellOf = (x, z) => [Math.round(x / TILE + H), Math.round(z / TILE +
 export const inGrid = (i, j) => i >= 0 && j >= 0 && i < GRID && j < GRID;
 
 export function spawnPos(s) {
-  const a = (s.angle * Math.PI) / 180;
-  return [Math.cos(a) * SPAWN_R, Math.sin(a) * SPAWN_R];
+  return s.pos;
 }
 
-function rng(seed) {
+export function distToPath(x, z, p) {
+  let best = Infinity;
+  for (let i = 0; i < p.pts.length - 1; i++) {
+    const [ax, az] = p.pts[i];
+    const [bx, bz] = p.pts[i + 1];
+    const dx = bx - ax, dz = bz - az;
+    const t = Math.max(0, Math.min(1, ((x - ax) * dx + (z - az) * dz) / (dx * dx + dz * dz)));
+    best = Math.min(best, Math.hypot(x - ax - dx * t, z - az - dz * t));
+  }
+  return best;
+}
+
+// How "open" a point is: < 0 inside a path or the clearing, > 0 in the forest.
+export function openness(x, z) {
+  let d = Math.hypot(x, z) - CLEAR_R;
+  for (const p of PATHS) d = Math.min(d, distToPath(x, z, p) - p.w / 2);
+  return d;
+}
+
+export function rng(seed) {
   let s = seed | 0;
   return () => {
     s = (s + 0x6d2b79f5) | 0;
@@ -29,39 +49,24 @@ function rng(seed) {
   };
 }
 
-// Base terrain: village core, off-map edge and a fixed scatter of rocks and thickets.
+// Base terrain: village core, the clearing and paths (walkable), a lake, and
+// forest everywhere else.
 function baseTerrain() {
   const t = new Uint8Array(GRID * GRID);
   for (let j = 0; j < GRID; j++) for (let i = 0; i < GRID; i++) {
     const [x, z] = cellCenter(i, j);
     const d = Math.hypot(x, z);
-    t[idx(i, j)] = d < WALL_R + 0.45 ? VILLAGE : d > FIELD_R ? OFFMAP : FREE;
+    let code;
+    if (d < WALL_R + 0.45) code = VILLAGE;
+    else if (d > FIELD_R + 1.5) code = OFFMAP;
+    else if (Math.hypot(x - LAKE.x, z - LAKE.z) < LAKE.r) code = WATER;
+    else if (openness(x, z) < TILE * 0.42) code = FREE;
+    else code = FOREST;
+    t[idx(i, j)] = code;
   }
-  // keep a clear area around every spawn point
-  const keep = new Set();
   for (const s of SPAWNS) {
-    const [sx, sz] = spawnPos(s);
-    const [ci, cj] = cellOf(sx, sz);
-    for (let dj = -2; dj <= 2; dj++) for (let di = -2; di <= 2; di++) keep.add(idx(ci + di, cj + dj));
-  }
-  const r = rng(1337);
-  let placed = 0;
-  for (let tries = 0; tries < 900 && placed < 46; tries++) {
-    const a = r() * Math.PI * 2;
-    const d = 6.5 + r() * 13.5;
-    const [ci, cj] = cellOf(Math.cos(a) * d, Math.sin(a) * d);
-    const shape = [[0, 0], ...[[1, 0], [0, 1], [-1, 0], [0, -1], [1, 1]].filter(() => r() < 0.45)];
-    const cells = shape.map(([di, dj]) => [ci + di, cj + dj]).filter(([i, j]) => inGrid(i, j));
-    if (cells.some(([i, j]) => t[idx(i, j)] !== FREE || keep.has(idx(i, j)))) continue;
-    // stay away from other clumps so paths remain readable
-    let near = false;
-    for (const [i, j] of cells) for (let dj = -2; dj <= 2 && !near; dj++) for (let di = -2; di <= 2 && !near; di++) {
-      if (inGrid(i + di, j + dj) && t[idx(i + di, j + dj)] === ROCK) near = true;
-    }
-    if (near) continue;
-    for (const [i, j] of cells) t[idx(i, j)] = ROCK;
-    if (!spawnsConnected(t)) { for (const [i, j] of cells) t[idx(i, j)] = FREE; continue; }
-    placed++;
+    const [ci, cj] = cellOf(...s.pos);
+    if (inGrid(ci, cj)) t[idx(ci, cj)] = FREE;
   }
   return t;
 }
@@ -92,7 +97,7 @@ const NB = [[1, 0, 1], [-1, 0, 1], [0, 1, 1], [0, -1, 1], [1, 1, Math.SQRT2], [1
 // Dijkstra from every goal cell outward. Diagonals may not cut blocked corners.
 export function buildFlowField(tiles = TERRAIN) {
   const N = GRID * GRID;
-  const dist = new Float32Array(N).fill(Infinity);
+  const dist = new Float64Array(N).fill(Infinity);
   const next = new Int32Array(N).fill(-1);
   const heap = []; // binary heap of [d, k]
   const push = (d, k) => {
@@ -155,6 +160,8 @@ export function routeFrom(field, x, z) {
 export const TERRAIN = baseTerrain();
 export const ROCK_CELLS = [];
 for (let j = 0; j < GRID; j++) for (let i = 0; i < GRID; i++) if (TERRAIN[idx(i, j)] === ROCK) ROCK_CELLS.push([i, j]);
+export const FOREST_CELLS = [];
+for (let j = 0; j < GRID; j++) for (let i = 0; i < GRID; i++) if (TERRAIN[idx(i, j)] === FOREST) FOREST_CELLS.push([i, j]);
 
 let cached = null;
 export function defaultField() {

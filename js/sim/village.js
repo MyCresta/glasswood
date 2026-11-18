@@ -84,7 +84,7 @@ export const OBJECTIVES = [
   { id: 'townhall2', title: 'Grow the Town Hall', guide: 'Buildings can reach twice the Town Hall’s level. Raise it to level 2 to keep improving.', check: (s) => s.buildings.townhall.level >= 2, reward: 60 },
   { id: 'night5', title: 'Hold until night 5', guide: 'On night 5 the Mossy Cave in the west opens and enemies come from two sides.', check: (s) => s.best >= 5, reward: 60 },
   { id: 'night10', title: 'Hold until night 10', guide: 'Keep raising the archers and walls. Use Hold to repeat a night you can win while you save up.', check: (s) => s.best >= 10, reward: 120 },
-  { id: 'maze', title: 'Build the first barricade', guide: 'Mazes arrive with the Workshop in the next update: barricades will make enemies take the long way round.', check: () => false, future: true },
+  { id: 'maze', title: 'Build the first barricade', guide: 'Barricades arrive with the Workshop in the next update: block a forest path and enemies must take the long way round.', check: () => false, future: true },
 ];
 
 export function checkObjectives(state, ev) {

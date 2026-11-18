@@ -15,10 +15,10 @@ const VIEW_TABS = [
 ];
 
 const NAV = [
-  { id: 'village', label: 'Overview', key: 'B', icon: '⌂' },
-  { id: 'log', label: 'Log', key: 'L', icon: '☰' },
-  { id: 'settings', label: 'Settings', key: 'O', icon: '⚙' },
-  { id: 'help', label: 'Help', key: '?', icon: '?' },
+  { id: 'village', label: 'Overview', key: 'B', icon: '<svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round" stroke-linecap="round"><path d="M3 17h14M5 17V9l5-5 5 5v8"/><path d="M8.5 17v-4h3v4"/></svg>' },
+  { id: 'log', label: 'Log', key: 'L', icon: '<svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round" stroke-linecap="round"><path d="M5 3h8l2 2v12H5z"/><path d="M8 8h5M8 11h5M8 14h3"/></svg>' },
+  { id: 'settings', label: 'Settings', key: 'O', icon: '<svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round" stroke-linecap="round"><path d="M4 6h8M15 6h1M4 14h2M9 14h7"/><path d="M12 4v4M7 12v4"/></svg>' },
+  { id: 'help', label: 'Help', key: '?', icon: '<svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round" stroke-linecap="round"><path d="M7.5 7.5a2.5 2.5 0 1 1 3.5 2.3c-.7.3-1 .8-1 1.5V12"/><path d="M10 15h.01"/><path d="M10 2l8 8-8 8-8-8z"/></svg>' },
 ];
 
 export class UI {
@@ -53,7 +53,7 @@ export class UI {
     this.nav = document.getElementById('nav');
     clear(this.nav).append(...NAV.map((n) => h('button.nav-btn', {
       type: 'button', dataset: { view: n.id }, onclick: () => this.toggle(n.id), title: `${n.label} (${n.key})`,
-    }, h('span.nav-icon', { 'aria-hidden': 'true' }, n.icon), h('span.nav-label', {}, n.label))));
+    }, h('span.nav-icon', { 'aria-hidden': 'true', html: n.icon }), h('span.nav-label', {}, n.label))));
 
     this.panel = document.getElementById('panel');
     this.queueEl = document.getElementById('queue');

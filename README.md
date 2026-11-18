@@ -5,7 +5,7 @@ A cosy idle tower defense in which the whole village is the tower. By day the vi
 The game has three views:
 
 - **Village:** the village up close in its forest clearing, with the Great Tower at its heart. This is where buildings (and later villagers) are managed.
-- **Defence:** zoomed far out over a wide landscape. The village is small in the middle, and miniature enemies come out of the forest toward its tower.
+- **Defence:** the same scene seen from far above. The village is small in its forest clearing, and enemies walk the forest paths toward its tower.
 - **World:** the land beyond, with neighbouring villages, ruins, dungeons and wild places for expeditions.
 
 **Play:** https://mycresta.github.io/asterwake/
@@ -23,7 +23,7 @@ The full design and milestone plan is in [`docs/game-plan.md`](docs/game-plan.md
 - Gold comes from kills and from each dawn. Upgrades are queued with builders, and buildings can reach twice the Town Hall's level.
 - Losing a night costs 10% of your free gold and moves the siege back two nights. Nothing is destroyed.
 - Time away: for up to 24 hours, the village keeps defending your best safely won night at 75% of its rewards. Upgrades keep building, and time away never loses a night.
-- The route each enemy will take is shown on the field during the day, ready for Milestone 2's mazes.
+- The route each enemy will take is shown on the field during the day, ready for Milestone 2's path barricades.
 - A World map with ten places to read about. Expeditions to them arrive in Milestone 6.
 - Saving: autosave with a rolling backup, plus export and import. If the game is open in two tabs, you choose which one continues. The game supports phone layouts, touch, keyboard, reduced motion, reduced flashing, larger text and a quality setting.
 
@@ -51,7 +51,7 @@ js/data/village.js  map, spawn points, buildings, enemies and all balance number
 js/data/world.js    places on the World map
 js/sim/             map + flow-field pathfinding, nights and combat, upgrades, time/offline
 js/persist/         localStorage saves, export/import, single-tab lock
-js/render/          Three.js: stage + Village, Defence and World views, models, landscapes, sky
+js/render/          Three.js: stage, the shared land scene (Village and Defence), the World view, models, landscapes, sky
 js/ui/              HUD, night card, building panels and views
 js/audio/           generative WebAudio music, ambience and battle sounds
 docs/game-plan.md   the design plan (revision 2)

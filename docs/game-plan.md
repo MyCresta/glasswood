@@ -1,13 +1,15 @@
 # Asterwake
-## Browser game requirements and implementation plan (revision 3)
+## Browser game requirements and implementation plan (revision 4)
 
 **Working title:** Asterwake. It still fits a village that wakes under strange stars, but the title is open for review (section 19).
 
-**Confirmed direction:** An idle tower defense game in a fantasy setting. The whole village is the tower. Its buildings are already in place and are unlocked, levelled and managed rather than built on a grid. Enemies come from fixed spawn points around the village, and the player can build mazes in the surrounding field to lengthen their route.
+**Confirmed direction:** An idle tower defense game in a fantasy setting. The whole village is the tower. Its buildings are already in place and are unlocked, levelled and managed rather than built on a grid. Enemies come from fixed spawn points around the village, and they walk forest paths toward it. The player can block individual paths with barricades to force longer detours.
+
+**What changed in revision 4:** The open meadow and free-form mazes are gone. The village sits in a clearing inside a dense forest, and enemies follow a network of forest paths from their spawn points. Paths fork and rejoin, so blocking one with a barricade sends enemies around by a longer route. Some later enemies may cut through the forest itself. The Village and Defence views are now two cameras on the same scene, so the tower, the village and the forest always have the same proportions. The look is darker and more mysterious: overcast dusk light, deep spruce forest, low mist, cold moonlight and will-o'-the-wisps at night.
 
 **What changed in revision 3:** The game is now presented in three views: the Village view (close up, where buildings and villagers are managed), the Defence view (zoomed far out over a wide landscape, where the tower defence plays out), and the World view (a larger map of villages, ruins and dungeons for expeditions and character combat). The archers now stand on a large Great Tower at the centre of the village. The village sits on the ground in a forest clearing, not on a floating island.
 
-**What changed from revision 1:** Revision 1 turned into a grid-based space colony builder and lost the tower defense focus. This revision removes plot grids, free building placement, power networks, multiple colonies, ships, shipping routes, alien factions and eras. Villagers with traits and a research tree carry over. The only grid in the game is the battlefield around the village, and it exists purely for mazes.
+**What changed from revision 1:** Revision 1 turned into a grid-based space colony builder and lost the tower defense focus. This revision removes plot grids, free building placement, power networks, multiple colonies, ships, shipping routes, alien factions and eras. Villagers with traits and a research tree carry over. The only grid in the game is the hidden pathfinding grid under the forest.
 
 **Design status:** Rules, quantities and content below are proposed defaults that form one coherent design for review. Section 19 lists the choices that most need confirming.
 
@@ -22,7 +24,7 @@ The core loop:
 1. The village produces resources by day while villagers work.
 2. Night falls and a wave attacks from the spawn points. Village defences fight automatically.
 3. Kills and night rewards bring gold and monster materials.
-4. The player restores and levels buildings, crafts gear, researches upgrades and rearranges the maze.
+4. The player restores and levels buildings, crafts gear, researches upgrades and decides which forest paths to barricade.
 5. Stronger defences survive harder nights, which bring better rewards and new enemy types.
 6. Expeditions send equipped villagers out for rare materials, recipes and new recruits.
 
@@ -35,7 +37,7 @@ There is no mandatory ending. Night milestones, boss nights and village developm
 - The game runs in a browser without installation or an account.
 - Desktop is the primary layout; tablets and phones down to 360 px wide portrait are fully supported with adapted layouts and touch controls.
 - Every essential action works with mouse, touch and keyboard. Dragging and shortcuts are conveniences, never the only route.
-- Dragging moves the camera. Tapping or clicking selects. Placing maze pieces uses an explicit placement mode so that panning never places anything by accident.
+- Dragging moves the camera. Tapping or clicking selects. Placing barricades uses an explicit placement mode so that panning never places anything by accident.
 - The player can pause, resume, adjust quality, go full screen and change audio settings. Opening menus never pauses the game. A paused save stays paused.
 - Unavailable actions explain what is missing.
 - Nothing requires fast reflexes, rapid tapping or being online at a specific real-world time.
@@ -49,7 +51,7 @@ The game is seen through three views of the same world. The player switches with
 | View | What it shows | What the player does there |
 | --- | --- | --- |
 | Village | The village up close in its forest clearing, with the Great Tower at its heart | Restore, level and manage buildings; later, manage villagers, assignments and gear |
-| Defence | The village small at the centre of a wide fantasy landscape of forest, hills, a lake and distant mountains, with no other settlements nearby | Watch the nights, read routes and spawn points, build mazes (Milestone 2), set targeting |
+| Defence | The village small at the centre of a wide fantasy landscape of forest, hills, a lake and distant mountains, with no other settlements nearby | Watch the nights, read routes and spawn points, block paths (Milestone 2), set targeting |
 | World | A much larger map with neighbouring villages, ruins, dungeons and wild places, linked by trails | Plan and follow expeditions and watch the characters' battles (Milestone 6) |
 
 ### 3.2 The village (Village view)
@@ -62,9 +64,11 @@ Villagers walk between home, work and the walls. At dusk they light lanterns and
 
 ### 3.3 The battlefield (Defence view)
 
-Seen from far above, the village is small and the Great Tower stands out at its centre. Around it lies the approach: a wide meadow with rocks and thickets, ringed by dense forest, with hills, a lake and mountains on the horizon. The meadow is divided into a subtle tile grid that only becomes visible in maze-placement mode. Spawn points are recognisable landmarks at the forest's edge, such as old stone arches and mossy caves. Before a night they glow and the routes enemies will take are shown.
+The Defence view is the same scene as the Village view, seen from much higher up, so nothing changes size between the two. The village is small at the centre of its clearing, with the Great Tower standing out. Around it lies a dense, dark forest of spruce, old oaks and dead trees, cut through by trodden dirt paths that fork, loop and rejoin. A lake lies to the east, and hills and mountains rise beyond the forest. There are no other settlements.
 
-Enemies are miniature, in scale with the village, and readable at a glance through silhouette, colour and movement: scurrying goblins, loping wolves, heavy brutes, fluttering bats. When zoomed out, small coloured markers keep them easy to follow. Projectiles, spells, hits and deaths have clear, satisfying feedback without visual noise.
+Spawn points are landmarks at the far ends of the paths, such as the Hollow Gate, a mossy cave and a sunken arch. Before a night they glow and the routes enemies will take are drawn along the paths.
+
+The mood is dark and quiet: overcast dusk by day, cold moonlight by night, low mist drifting between the trees and pale wisps in the forest after dark. Light from the village and the tower's lanterns is the warmest thing on screen.
 
 ### 3.4 The wider world (World view)
 
@@ -92,9 +96,9 @@ Night 1 begins after a short first day of about two minutes. It is gentle enough
 
 Pacing targets:
 - First meaningful upgrade affordable within 2 minutes.
-- First maze piece available on night 3.
+- First barricade available on night 3.
 - Blacksmith restorable within about 15 minutes.
-- First lost night typically around night 8 to 12 for a player who hasn't engaged with mazes or gear.
+- First lost night typically around night 8 to 12 for a player who hasn't engaged with barricades or gear.
 - First boss night (night 10) is a clear milestone.
 
 ## 5. Time, nights and offline progress
@@ -102,8 +106,8 @@ Pacing targets:
 ### 5.1 The day and night cycle
 
 - A cycle is one **day** followed by one **night**. Proposed default: a 2-minute day, then a night that lasts until its wave is cleared or the village falls, with a 3-minute cap after which remaining enemies retreat.
-- Day: production runs at full speed, crafting and research continue, and maze changes are free.
-- Night: production continues (proposed: at full speed, for simplicity). Maze pieces can't be placed or removed while enemies are on the field, so the player commits to a layout before dusk. Pieces can still be repaired.
+- Day: production runs at full speed, crafting and research continue, and barricades can be moved freely.
+- Night: production continues (proposed: at full speed, for simplicity). Barricades can't be placed or removed while enemies are on the field, so the player commits to a plan before dusk.
 - The player can **call the night early** to skip the rest of the day.
 - The player can turn on **hold** to replay the current night level instead of advancing. That gives a safe way to farm rewards while the defences catch up.
 
@@ -121,7 +125,7 @@ Pacing targets:
 | Gold | Monster kills, night rewards, Market, expeditions | Restoring and levelling buildings, recruiting, crafting fees | Storehouse capacity |
 | Food | Farmstead, expeditions | Villager upkeep (0.1 per villager per minute), expedition supplies, recruiting | Storehouse capacity |
 | Timber | Lumber Camp | Buildings, barricades, arrows and ballista ammunition are abstracted (no ammo tracking) | Storehouse capacity |
-| Stone | Quarry | Walls, building levels, stone maze walls | Storehouse capacity |
+| Stone | Quarry | Walls, building levels, stone barricades | Storehouse capacity |
 | Iron | Mine | Gear, building levels, traps | Storehouse capacity |
 | Monster materials | Drops from enemies, expeditions | Gear crafting and gear upgrades | Separate material pouch, no cap |
 | Knowledge | Library | Research | Shared bank, no cap |
@@ -158,7 +162,7 @@ Monster materials come in tiers that follow enemy families, for example Goblin S
 | Quarry | Ruin | Night 2 | Stone (5/min) | Output |
 | Mine | Ruin | Town Hall 2 | Iron (3/min) | Output; level 5 occasionally finds gems used by trinkets |
 | Storehouse | Ruin | Night 3 | Storage for Gold, Food, Timber, Stone and Iron | Capacity ×1.5 per level |
-| Workshop | Ruin | Night 3 | Maze pieces and traps, repairs, the Ballista add-on | Maze-point budget, unlocks new piece types, repair speed, Ballista damage |
+| Workshop | Ruin | Night 3 | Barricades and traps, repairs, the Ballista add-on | Number of barricades, tougher barricade types, repair speed, Ballista damage |
 | Blacksmith | Ruin | Town Hall 2 | Crafts, upgrades, reforges and salvages gear | Recipe tier, crafting slots (1 → 3), crafting speed, max upgrade level of items |
 | Tavern | Ruin | Night 5 | Recruits villagers, houses them, forms expedition parties, runs the quest board | Candidate quality, housing, party size, expedition slots |
 | Library | Ruin | Town Hall 2 | Knowledge and the research tree | Knowledge output, research queue length |
@@ -197,50 +201,42 @@ All attacks come from the village itself:
 | Defenders on wall posts | One attack per assigned villager | Their damage and style come from profession, level and gear: bows (range), spears (short range, high damage), staves (small splash) |
 | Mage Tower spells | Area damage and slows on cooldowns | Spells auto-cast. The player can set preferences (save frost for brutes, for example) |
 | Ballista (Workshop add-on) | Slow, very heavy single shot | Strong against brutes and bosses |
-| Traps | Damage or slow enemies who walk over them | Placed in the maze (section 8.4) |
+| Traps | Damage or slow enemies who walk over them | Placed on forest paths (section 8.4) |
 
 Every attack has damage, attack speed, range, and optionally critical chance, splash and slow. A defence breakdown shows where each number comes from: building level, research, villager, gear, traits.
 
-Range is the key link between village and maze: the village only hits enemies within its range rings, so a maze that winds inside those rings multiplies the damage enemies take before they arrive.
+Range is the key link between village and paths: the village only hits enemies within its range rings, so a barricade that forces a detour through those rings multiplies the damage enemies take before they arrive.
 
 ### 8.3 Spawn points and enemy movement
 
 - The battlefield has **six spawn points** around the village, placed by hand like the buildings. Night 1 uses one. More open as nights progress (2 at night 5, 3 at night 12, all 6 by night 30), so pressure gradually comes from all sides.
 - Before each night, active spawn points glow and the night preview lists which enemies come from where.
-- Ground enemies walk the shortest available route from their spawn point to the walls, recalculated whenever the maze changes (a flow field towards the wall).
-- **Flyers ignore the maze** and fly straight in, so the maze can never be the whole answer.
+- Ground enemies walk the shortest available route from their spawn point to the walls, recalculated whenever a barricade changes (a flow field towards the wall).
+- **Flyers ignore the paths** and fly straight in, so barricades can never be the whole answer.
 - Enemies attack walls only, except Sappers (below).
 
-### 8.4 Mazes
+### 8.4 Forest paths and barricades
 
-- The battlefield is a tile grid (proposed: 41 × 41 tiles, with the village occupying the centre). The grid is only drawn during placement mode.
-- The Workshop gives a **maze-point budget**. Each piece costs points and resources. Levelling the Workshop and research raise the budget.
-- **The maze can never fully block a route.** Placement is rejected if any active or future spawn point would lose its path to the walls. The preview shows the new path live, with its length and the estimated walking time compared to before.
-- Pieces can be placed, rotated (where shaped), sold for a full refund by day, and saved as **layout presets** so that the player can switch between maze plans.
+Replaces the free-form mazes of earlier revisions. The details are still to be decided; this is the direction.
 
-| Piece | Effect | Unlock |
-| --- | --- | --- |
-| Barricade | Blocks one tile. Cheap, wooden | Workshop 1 |
-| Stone Wall (1×3) | Blocks three tiles in a line; much tougher against Sappers | Workshop 3 |
-| Spike Trap | Walkable; damages each enemy that crosses | Workshop 2 |
-| Tar Pit | Walkable; slows by 40% while inside | Workshop 4 |
-| Watch Torch | Blocks a tile; extends archer range near it by 10% | Workshop 6 and research |
-| Rune Stone | Blocks a tile; boosts spell damage on nearby enemies by 15% | Mage Tower 5 |
-
-Only Sappers attack maze pieces. Broken pieces are rebuilt free at dawn, so a lost barricade costs a night's advantage, not resources.
+- Enemies walk the forest paths. The path network is hand-made, with forks, cross-links between neighbouring paths and a ring road near the clearing, so most spawn points have more than one way in.
+- The player can place a **barricade** across a path at marked choke points. Enemies then take the next shortest route, which is usually a longer detour past more of the tower's range.
+- **A barricade can never seal the village off.** Placement is rejected if any active or future spawn point would lose every route to the walls. The preview shows the new route and how much longer it is.
+- Some enemies ignore the paths: later enemies may push straight through the forest (slower, but shorter), and flyers ignore the ground entirely, so barricades are never the whole answer.
+- Open questions: how many barricades the Workshop allows, whether barricades can be attacked and repaired, whether traps sit on paths, and whether some paths start overgrown and must be cleared before they can be used or blocked.
 
 ### 8.5 Enemies
 
 | Enemy | First night | Role | Counter |
 | --- | --- | --- | --- |
 | Goblin | 1 | Basic, weak, numerous | Anything |
-| Wolf | 3 | Fast and fragile | Long mazes, frost |
+| Wolf | 3 | Fast and fragile | Long detours, frost |
 | Brute | 6 | Slow, high health, hits walls hard | Ballista, spears, focused fire |
-| Bat Swarm | 8 | Flying, ignores the maze | Archers set to flyers first, Watchtower |
+| Bat Swarm | 8 | Flying, ignores paths and barricades | Archers set to flyers first, Watchtower |
 | Shieldbearer | 11 | High armour, protects nearby enemies from arrows | Spells, heavy damage per hit |
-| Sapper | 14 | Attacks maze pieces in its way | Stone walls, killing it early |
+| Sapper | 14 | Breaks barricades in its way | Stone walls, killing it early |
 | Shaman | 18 | Heals nearby enemies | Priority targeting, splash |
-| Wraith | 25 | Briefly invisible, slips past tight mazes | Rune stones, Watchtower detection |
+| Wraith | 25 | Briefly invisible, slips through the forest | Rune stones, Watchtower detection |
 
 **Boss nights** happen every 10 nights: the Goblin Chief (10), the Alpha Wolf (20), the Stone Troll (30), then repeating with stronger variants and new bosses added later. A boss night has a distinct dusk, music and reward chest.
 
@@ -330,7 +326,7 @@ One project at a time with a three-project queue, fed by a shared Knowledge bank
 | Branch | Example technologies |
 | --- | --- |
 | Defence | Fletching (+15% arrow damage), Volley (second Archery target), Reinforced Walls (+20% integrity), Siege Engineering (Ballista), Watchfires (+10% range at night) |
-| Battlefield | Barricade Craft (+maze points), Masonry (Stone Walls), Trapmaking (Spike Traps, Tar Pits), Runecraft (Rune Stones), Pathfinding Studies (path length shown per spawn point, longer warning) |
+| Battlefield | Barricade Craft (+1 barricade), Masonry (Stone Walls), Trapmaking (Spike Traps, Tar Pits), Runecraft (Rune Stones), Pathfinding Studies (path length shown per spawn point, longer warning) |
 | Village | Crop Rotation (+20% Food), Sawmills (+20% Timber), Deep Shafts (+20% Iron), Granaries (+storage), Hospitality (faster recruiting, +housing) |
 | Craft & lore | Metallurgy (Fine recipes), Masterworks (Masterwork odds), Arcane Basics (Mage Tower), Frost Lore and Storm Lore (new spells), Cartography (new expedition regions) |
 
@@ -354,7 +350,7 @@ At most three unresolved events wait at a time. Events never block production or
 Principal views:
 
 - **Village view:** the village up close; building selection and management, and later villagers.
-- **Defence view:** the battlefield; integrity, routes, spawn points, and maze mode (the grid, maze budget, piece palette, live path preview per spawn point, and layout presets).
+- **Defence view:** the battlefield; integrity, routes, spawn points, and barricade mode (choke points, barricades left, live route preview per spawn point).
 - **World view:** the wider map; places, expeditions and character battles.
 - The resource bar, the day and night timer, the next-night preview and the view tabs are always visible.
 - **Villagers:** roster, assignments, wall posts, gear overview.
@@ -365,12 +361,12 @@ During a night, the HUD adds integrity, enemies remaining per spawn point, activ
 
 ## 15. Saving and recovery
 
-Unchanged from revision 1: autosave plus manual save, a visible save indicator, a rolling recoverable backup, export and import with a preview, a clear message when storage fails, and protection against two tabs running the same village. Maze layout presets are saved with the village.
+Unchanged from revision 1: autosave plus manual save, a visible save indicator, a rolling recoverable backup, export and import with a preview, a clear message when storage fails, and protection against two tabs running the same village. Barricade placements are saved with the village.
 
 ## 16. Presentation and performance
 
 - Target 60 fps on an ordinary integrated-graphics desktop. A reduced-detail mode should hold about 30 fps on modest phones.
-- The game must handle at least 300 enemies on screen, 100 projectiles and the full village at once. Enemies use instanced rendering, and pathfinding uses one shared flow field per spawn point that is recomputed only when the maze changes.
+- The game must handle at least 300 enemies on screen, 100 projectiles and the full village at once. Enemies use instanced rendering, and pathfinding uses one shared flow field per spawn point that is recomputed only when a barricade changes.
 - Combat runs on a fixed-step simulation independent of frame rate, so results are identical at any quality setting or speed.
 - Lower quality may reduce particles, shadows and crowd animation, never outcomes.
 
@@ -379,7 +375,7 @@ Unchanged from revision 1: autosave plus manual save, a visible save indicator, 
 | Area | Content |
 | --- | --- |
 | Village | 16 preplaced buildings with ruin states and visible levels 1–10 (Town Hall to 5) |
-| Battlefield | 1 hand-made map with 6 spawn points; 6 maze piece types; layout presets |
+| Battlefield | 1 hand-made map with 6 spawn points; a forest path network with barricade choke points |
 | Enemies | 8 regular types, 3 bosses, scaling to night 100+ |
 | Villagers | 7 professions, 12 traits, varied names and portraits |
 | Gear | 3 slots, 3 weapon styles, at least 30 recipes, 4 rarities |
@@ -397,9 +393,9 @@ Each milestone is a playable game, and the tower defense comes first.
 The three views (Village, Defence, and a World map with its places), the preplaced village with the Great Tower with the starting buildings, integrity, the Great Tower, the day and night cycle, one spawn point, Goblins and Wolves, night scaling, winning and losing nights, Gold from kills, levelling the Great Tower and Walls, and saving.
 *Complete when* the player can watch a night play out, upgrade between nights, eventually lose a night, recover, and come back to the same village later.
 
-### Milestone 2: Mazes
-The battlefield grid, the Workshop, barricades, stone walls and spike traps, the live path preview with the never-block rule, multiple spawn points, Brutes and Bat Swarms (flyers ignore the maze), and layout presets.
-*Complete when* a good maze visibly changes which night the player can reach, and flyers make a pure-maze strategy insufficient.
+### Milestone 2: Barricades
+The Workshop, barricades at path choke points, the live route preview with the never-seal rule, Brutes and Bat Swarms (flyers ignore the paths), and enemies that push through the forest.
+*Complete when* well-placed barricades visibly change which night the player can reach, and flyers make a barricade-only strategy insufficient.
 
 ### Milestone 3: A living village economy
 Resources and storage, ruins and restoration, building screens and levels, Town Hall caps, villagers with traits, jobs and wall posts, recruitment at the Tavern, food upkeep, offline progress with safe-night defence, and the return summary.
@@ -411,7 +407,7 @@ Gear slots, recipes, monster materials, crafting, rarity, upgrades, reforging, s
 
 ### Milestone 5: Research and magic
 The Library, the research tree, the Mage Tower with spells, the Ballista, tar pits and rune stones, Shieldbearers, Sappers and Shamans, and the first boss nights.
-*Complete when* different defence builds (arrow-heavy, spell-heavy, maze-heavy) are viable.
+*Complete when* different defence builds (arrow-heavy, spell-heavy, barricade-heavy) are viable.
 
 ### Milestone 6: Expeditions
 Parties setting out from the Tavern and travelling the World view, character combat on the map with simple player decisions, forecasts, results, setbacks, recipes and recruits from expeditions, and offline expeditions.
@@ -422,15 +418,15 @@ Wraiths, all bosses and scaling to night 100+, the Watchtower, Temple and Market
 *Complete when* the game sustains many hours of progression with clear goals.
 
 ### Milestone 8: The complete browser experience
-Full visual and audio polish across day and night, phone layouts for maze mode, accessibility settings, performance at the stated enemy counts, and import/export.
+Full visual and audio polish across day and night, phone layouts for barricade mode, accessibility settings, performance at the stated enemy counts, and import/export.
 
 ## 19. Decisions still open
 
 1. **Offline defence:** This plan replays the "safe night" at 75% rewards, so offline time never loses and never advances. Alternatives are fully simulating offline nights (with possible losses), or no offline nights at all (economy only).
 2. **Night rhythm:** Distinct nights with a 2-minute day suit an idle game with a cosy rhythm. The alternative is continuous waves with no day phase, as in many idle tower defence games, which would make the day and night visuals cosmetic.
-3. **Spawn points versus all sides:** This plan uses six fixed spawn points that open over time, so that mazes stay readable. True "from any edge" spawning makes mazes much harder to plan.
+3. **Spawn points versus all sides:** This plan uses six fixed spawn points that open over time, at the ends of forest paths, so that routes stay readable.
 4. **Wall posts and day jobs:** Here defenders keep their day jobs. Making them full-time soldiers creates a sharper economy-versus-defence trade-off.
-5. **Should anything outside the village shoot?** Here only the village attacks, and the maze holds only barriers and traps. Allowing a few outpost towers in the field would add strategy but dilute the "the village is the tower" idea.
+5. **Should anything outside the village shoot?** Here only the village attacks, and the paths hold only barricades and traps. Allowing a few outpost towers in the field would add strategy but dilute the "the village is the tower" idea.
 6. **Name:** Asterwake, or something more village-like, such as Lanternhold, Hearthward, Emberfield or The Long Night. These are suggestions; availability has not been checked.
 
 ## 20. Relationship to the current prototype
@@ -439,4 +435,4 @@ The Milestone 1–2 build from revision 1 is not wasted, but its core building m
 
 - **Keep:** the save, backup, export/import and two-tab lock; offline catch-up and the return summary; the research bank and queue; villagers' portraits, traits, experience and roster screens; the toast, modal, settings, help and keyboard framework; the day/night lighting, sky and camera; the audio engine; the test setup and GitHub Pages deployment.
 - **Replace:** the plot grid, free placement, relocation and demolition; the power network; the generic building catalog (with the hand-composed village and building screens); and the space theme in models and text (with fantasy art).
-- **New:** the battlefield grid and flow-field pathfinding, the enemy and projectile simulation, integrity, spawn points, maze placement with path preview, and wave scaling. This is the heart of Milestones 1 and 2.
+- **New:** the battlefield grid and flow-field pathfinding, the enemy and projectile simulation, integrity, spawn points, barricade placement with route preview, and wave scaling. This is the heart of Milestones 1 and 2.

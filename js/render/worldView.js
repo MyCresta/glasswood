@@ -24,17 +24,23 @@ function labelTexture(title, sub) {
   const c = document.createElement('canvas');
   c.width = 512; c.height = 128;
   const x = c.getContext('2d');
-  x.font = '600 46px "Bricolage Grotesque", system-ui, sans-serif';
-  const w = Math.max(x.measureText(title).width, 120) + 60;
-  x.fillStyle = 'rgba(46,37,30,0.88)';
+  x.font = '48px "IM Fell English", Georgia, serif';
+  const w = Math.max(x.measureText(title).width, 120) + 56;
   const left = (512 - w) / 2;
+  const hgt = sub ? 104 : 68;
+  const cut = 12;
   x.beginPath();
-  x.roundRect(left, 8, w, sub ? 108 : 70, 26);
+  x.moveTo(left + cut, 8); x.lineTo(left + w - cut, 8); x.lineTo(left + w, 8 + cut); x.lineTo(left + w, 8 + hgt - cut);
+  x.lineTo(left + w - cut, 8 + hgt); x.lineTo(left + cut, 8 + hgt); x.lineTo(left, 8 + hgt - cut); x.lineTo(left, 8 + cut); x.closePath();
+  x.fillStyle = 'rgba(20,22,24,0.86)';
   x.fill();
-  x.fillStyle = '#efe6d8';
+  x.strokeStyle = 'rgba(217,165,74,0.55)';
+  x.lineWidth = 2;
+  x.stroke();
+  x.fillStyle = '#e8dcc2';
   x.textAlign = 'center';
   x.fillText(title, 256, 58);
-  if (sub) { x.font = '400 30px Lexend, system-ui, sans-serif'; x.fillStyle = '#d9c9a8'; x.fillText(sub, 256, 100); }
+  if (sub) { x.font = '28px "Alegreya Sans", system-ui, sans-serif'; x.fillStyle = '#b9a98a'; x.fillText(sub, 256, 98); }
   const t = new THREE.CanvasTexture(c);
   t.colorSpace = THREE.SRGBColorSpace;
   return t;
@@ -78,10 +84,10 @@ export class WorldView {
     };
     this.height = height;
     const grass = PAL.grass.map((c) => new THREE.Color(c));
-    const sand = new THREE.Color('#dcc995');
-    const rock = new THREE.Color('#9a9187');
-    const snow = new THREE.Color('#f2f4f6');
-    const seabed = new THREE.Color('#5d8fa8');
+    const sand = new THREE.Color('#8f8566');
+    const rock = new THREE.Color('#6a655d');
+    const snow = new THREE.Color('#c7ccd3');
+    const seabed = new THREE.Color('#2b4552');
     this.scene.add(buildGround({
       radius: 230, rings: 90, segs: 240, height,
       color: (x, z, y, c) => {
@@ -110,7 +116,7 @@ export class WorldView {
     });
     this.scene.add(buildForest(spots, { cast: false }));
     // dotted trails from home to each place
-    const trail = new THREE.MeshBasicMaterial({ color: '#c9a777', transparent: true, opacity: 0.85 });
+    const trail = new THREE.MeshBasicMaterial({ color: '#a88a5c', transparent: true, opacity: 0.7 });
     const dotGeo = new THREE.CircleGeometry(0.45, 10);
     dotGeo.rotateX(-Math.PI / 2);
     const pts = [];

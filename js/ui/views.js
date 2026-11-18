@@ -121,7 +121,7 @@ export function spawnView(ui, sid) {
         ['Route to the walls', `${route.length.toFixed(1)} paces`],
         ...Object.keys(counts).map((t) => [`${ENEMIES[t].plural} arrive in`, `about ${dur(route.length / ENEMIES[t].speed)}`]),
       ]),
-      h('p.muted.small', {}, 'The dotted line on the field shows the route. Mazes built in the next update will make it longer.')));
+      h('p.muted.small', {}, 'The dotted line shows the route along the forest paths. Barricades in the next update will let you force a longer one.')));
   } else {
     el.append(h('section.card', {}, h('h3', {}, 'Sealed for now'), h('p', {}, `Opens on night ${sp.opens}. Until then, nothing comes through.`)));
   }

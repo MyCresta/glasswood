@@ -3,8 +3,8 @@ import * as THREE from 'three';
 import { G, add, finalize, seeded } from './kit.js';
 const BIOMES = {
   temperate: {
-    sky: { day: ['#86bedc', '#f6e2bd', '#cdb9d8'], dusk: ['#3b4a86', '#f3a777', '#5a4677'], night: ['#0b1230', '#272656', '#100e28'] },
-    planet: { a: '#dfe3f2', b: '#b9b4d8', ring: '#e6dccb' },
+    sky: { day: ['#4a5c72', '#a99c86', '#3c4651'], dusk: ['#262b4c', '#b06d52', '#2a2440'], night: ['#060a16', '#171a33', '#080912'] },
+    planet: { a: '#c9cbd8', b: '#8f8aa8', ring: '#b8b0a2' },
   },
 };
 
@@ -60,7 +60,7 @@ export function buildSky(biome) {
   group.add(planet);
 
   // clouds: soft clusters drifting below and around the island
-  const cloudMat = new THREE.MeshStandardMaterial({ color: '#ffffff', roughness: 1, transparent: true, opacity: 0.4, depthWrite: false });
+  const cloudMat = new THREE.MeshStandardMaterial({ color: '#9aa3ad', roughness: 1, transparent: true, opacity: 0.35, depthWrite: false });
   const clouds = [];
   for (let i = 0; i < 9; i++) {
     const c = new THREE.Group();
