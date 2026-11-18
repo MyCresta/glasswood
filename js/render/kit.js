@@ -20,6 +20,20 @@ export const G = {
   cone: (r, h, s = 20) => cached(`co${r},${h},${s}`, () => new THREE.ConeGeometry(r, h, s)),
   ico: (r, d = 0) => cached(`ic${r},${d}`, () => new THREE.IcosahedronGeometry(r, d)),
   circle: (r, s = 20) => cached(`ci${r},${s}`, () => new THREE.CircleGeometry(r, s)),
+  // Gable roof: triangular prism, base on y = 0, ridge along z.
+  prism: (w, h, len) => cached(`pr${w},${h},${len}`, () => {
+    const sh = new THREE.Shape();
+    sh.moveTo(-w / 2, 0); sh.lineTo(w / 2, 0); sh.lineTo(0, h); sh.lineTo(-w / 2, 0);
+    const geo = new THREE.ExtrudeGeometry(sh, { depth: len, bevelEnabled: false });
+    geo.translate(0, 0, -len / 2);
+    geo.computeVertexNormals();
+    return geo;
+  }),
+  pyramid: (r, h, sides = 4) => cached(`py${r},${h},${sides}`, () => {
+    const geo = new THREE.ConeGeometry(r, h, sides);
+    geo.rotateY(Math.PI / sides);
+    return geo;
+  }),
   halfCyl: (r, len, s = 24) => cached(`hc${r},${len}`, () => {
     const geo = new THREE.CylinderGeometry(r, r, len, s, 1, true, -Math.PI / 2, Math.PI);
     geo.rotateZ(Math.PI / 2);
@@ -27,37 +41,37 @@ export const G = {
   }),
 };
 
-export function makeMaterials(accentColor = '#7fd6c8') {
-  const std = (color, o = {}) => new THREE.MeshStandardMaterial({ color, roughness: 0.78, metalness: 0.02, ...o });
-  const m = {
-    foundation: std('#b9b2a6', { roughness: 0.92 }),
-    wall: std('#efe6d6'),
-    wallWarm: std('#e7cfae'),
-    wallCool: std('#c8d3d8'),
-    roof: std('#4a5560', { roughness: 0.55, metalness: 0.15 }),
-    dark: std('#2f363d', { roughness: 0.5, metalness: 0.3 }),
-    metal: std('#a4adb5', { roughness: 0.35, metalness: 0.65 }),
-    brass: std('#d1a65a', { roughness: 0.35, metalness: 0.7 }),
-    accent: std(accentColor, { roughness: 0.6 }),
-    hazard: std('#e58b4a', { roughness: 0.6 }),
-    teal: std('#5aa6a0', { roughness: 0.55 }),
-    leaf: std('#6fb35a', { roughness: 0.85 }),
-    leafDark: std('#4c8f4a', { roughness: 0.85 }),
+export function makeMaterials(accentColor = '#f0a86b') {
+  const std = (color, o = {}) => new THREE.MeshStandardMaterial({ color, roughness: 0.82, metalness: 0, ...o });
+  return {
+    plaster: std('#efe3c9'),
+    plasterWarm: std('#e8cfa6'),
+    timber: std('#6e4a31', { roughness: 0.9 }),
+    wood: std('#9b6c45', { roughness: 0.88 }),
+    woodLight: std('#c49567', { roughness: 0.88 }),
+    stone: std('#aea596', { roughness: 0.95 }),
+    stoneDark: std('#7f776c', { roughness: 0.95 }),
+    stoneMoss: std('#7f8a62', { roughness: 0.95 }),
+    roofRed: std('#b65a3e', { roughness: 0.7 }),
+    roofSlate: std('#55627a', { roughness: 0.65 }),
+    roofThatch: std('#cfa45c', { roughness: 0.95 }),
+    iron: std('#5b5e64', { roughness: 0.45, metalness: 0.5 }),
+    gold: std('#e0b24f', { roughness: 0.35, metalness: 0.7 }),
+    accent: std(accentColor, { roughness: 0.7 }),
+    cloth: std('#e9e0cf', { roughness: 0.9 }),
+    leaf: std('#6fae55', { roughness: 0.85 }),
+    leafDark: std('#4b8a46', { roughness: 0.85 }),
+    crop: std('#d8bf5a', { roughness: 0.9 }),
     soil: std('#7a5a43', { roughness: 1 }),
-    ore: std('#8d96a3', { roughness: 0.4, metalness: 0.55, flatShading: true }),
-    panel: std('#2c4372', { roughness: 0.22, metalness: 0.55 }),
-    fuelTank: std('#e7a646', { roughness: 0.5, metalness: 0.2 }),
-    foodCrate: std('#9cc56f', { roughness: 0.7 }),
-    glass: new THREE.MeshStandardMaterial({ color: '#bfe8f0', roughness: 0.08, metalness: 0.1, transparent: true, opacity: 0.38, depthWrite: false, emissive: '#9fd8e6', emissiveIntensity: 0.05 }),
-    window: new THREE.MeshStandardMaterial({ color: '#fff0cf', emissive: '#ffcf87', emissiveIntensity: 0.15, roughness: 0.4 }),
-    growLight: new THREE.MeshStandardMaterial({ color: '#ffd9f0', emissive: '#ff9ad6', emissiveIntensity: 0.4, roughness: 0.4 }),
-    orb: new THREE.MeshStandardMaterial({ color: '#c6d0ff', emissive: '#98abff', emissiveIntensity: 1.2, roughness: 0.2 }),
-    beacon: new THREE.MeshStandardMaterial({ color: '#ffb0a0', emissive: '#ff6a4d', emissiveIntensity: 1.6 }),
-    flame: new THREE.MeshStandardMaterial({ color: '#ffd38a', emissive: '#ff9a3c', emissiveIntensity: 2.0, transparent: true, opacity: 0.9, depthWrite: false }),
-    statusGreen: new THREE.MeshStandardMaterial({ color: '#b6f5b0', emissive: '#6fe07a', emissiveIntensity: 1.2 }),
-    scaffold: std('#d6a24e', { roughness: 0.6, metalness: 0.2 }),
+    hay: std('#e3c46b', { roughness: 1 }),
+    water: std('#78b4cf', { roughness: 0.2, metalness: 0.1 }),
+    white: std('#f4f1ea', { roughness: 0.9 }),
+    dark: std('#2c2622', { roughness: 0.8 }),
+    window: new THREE.MeshStandardMaterial({ color: '#ffe9c2', emissive: '#ffb85c', emissiveIntensity: 0.12, roughness: 0.5 }),
+    torch: new THREE.MeshStandardMaterial({ color: '#ffd38a', emissive: '#ff9a3c', emissiveIntensity: 0.3, roughness: 0.5 }),
+    portal: new THREE.MeshBasicMaterial({ color: '#2a1840', transparent: true, opacity: 0.92 }),
+    rune: new THREE.MeshStandardMaterial({ color: '#c9b4ff', emissive: '#9d7bff', emissiveIntensity: 0.6 }),
   };
-  return m;
 }
 
 // Add a mesh to a parent. Options: rot [x,y,z], scale [x,y,z] or number, dynamic.
@@ -138,4 +152,31 @@ export function noise2(seed) {
     const v = (i, j) => vals[(((i % P) + P) % P) + (((j % P) + P) % P) * P];
     return lerp(lerp(v(xi, yi), v(xi + 1, yi), xf), lerp(v(xi, yi + 1), v(xi + 1, yi + 1), xf), yf);
   };
+}
+
+// Merge coloured parts into one geometry with a vertex colour attribute
+// (used for instanced enemies and arrows: one draw call per kind).
+export function mergeColored(parts) {
+  const geos = [];
+  const m = new THREE.Matrix4();
+  const q = new THREE.Quaternion();
+  const e = new THREE.Euler();
+  for (const p of parts) {
+    const g = (p.geo.index ? p.geo.toNonIndexed() : p.geo.clone());
+    for (const k of Object.keys(g.attributes)) if (k !== 'position' && k !== 'normal') g.deleteAttribute(k);
+    e.set(...(p.rot || [0, 0, 0]));
+    q.setFromEuler(e);
+    const sc = typeof p.scale === 'number' ? new THREE.Vector3(p.scale, p.scale, p.scale) : new THREE.Vector3(...(p.scale || [1, 1, 1]));
+    m.compose(new THREE.Vector3(...(p.pos || [0, 0, 0])), q, sc);
+    g.applyMatrix4(m);
+    const c = new THREE.Color(p.color);
+    const n = g.attributes.position.count;
+    const col = new Float32Array(n * 3);
+    for (let i = 0; i < n; i++) { col[i * 3] = c.r; col[i * 3 + 1] = c.g; col[i * 3 + 2] = c.b; }
+    g.setAttribute('color', new THREE.BufferAttribute(col, 3));
+    geos.push(g);
+  }
+  const out = mergeGeometries(geos, false);
+  geos.forEach((g) => g.dispose());
+  return out;
 }

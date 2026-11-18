@@ -1,323 +1,334 @@
-// Building models. Each returns a Group sitting on y = 0 within a ~1.9 footprint,
-// with `userData.anims` listing moving parts. Higher levels add visible detail.
+// Village buildings, ruins, walls, spawn portals, and instanced enemy/arrow
+// geometry. Every group sits on y = 0; `userData.anims` lists moving parts.
 import * as THREE from 'three';
-import { G, add, finalize } from './kit.js';
+import { G, add, finalize, seeded, mergeColored } from './kit.js';
+import { WALL_R, BUILDINGS } from '../data/village.js';
 
 const TAU = Math.PI * 2;
 
-function foundation(g, M, w = 1.9, d = 1.9) {
-  add(g, G.rbox(w, 0.14, d, 0.07), M.foundation, 0, 0.07, 0, { cast: false });
+function windowPane(g, M, x, y, z, ry = 0, w = 0.16, h = 0.2) {
+  add(g, G.rbox(w, h, 0.04, 0.02), M.window, x, y, z, { rot: [0, ry, 0], cast: false });
 }
 
-function windowsRing(g, M, r, y, n, size = 0.09, offset = 0) {
-  for (let i = 0; i < n; i++) {
-    const a = (i / n) * TAU + offset;
-    add(g, G.rbox(size, size * 1.3, 0.04, 0.02), M.window, Math.sin(a) * r, y, Math.cos(a) * r, { rot: [0, a, 0], cast: false });
-  }
+function torch(g, M, x, y, z) {
+  add(g, G.cyl(0.02, 0.025, 0.22, 6), M.timber, x, y, z);
+  add(g, G.sph(0.045, 8, 6), M.torch, x, y + 0.14, z, { cast: false });
 }
 
-function lamp(g, M, x, z, h = 0.55) {
-  add(g, G.cyl(0.022, 0.03, h, 8), M.dark, x, h / 2, z);
-  add(g, G.sph(0.055, 12, 8), M.window, x, h + 0.03, z, { cast: false });
+function flag(g, M, anims, x, y, z, h = 0.6) {
+  add(g, G.cyl(0.015, 0.015, h, 6), M.timber, x, y + h / 2, z);
+  const f = add(g, G.rbox(0.24, 0.15, 0.015, 0.006), M.accent, x + 0.12, y + h - 0.1, z, { dynamic: true });
+  anims.push({ obj: f, type: 'flutter', speed: 2.4 });
 }
 
-function trim(lv, M) {
-  return lv >= 10 ? M.brass : M.accent;
+// A timber-framed house body with gable roof. Returns height of the eaves.
+function house(g, M, { w = 1.2, d = 1, h = 0.7, x = 0, z = 0, ry = 0, roof = M.roofRed, wall = M.plaster, base = M.stone, roofH = 0.55 } = {}) {
+  const grp = new THREE.Group();
+  grp.position.set(x, 0, z);
+  grp.rotation.y = ry;
+  add(grp, G.rbox(w + 0.06, 0.18, d + 0.06, 0.04), base, 0, 0.09, 0);
+  add(grp, G.rbox(w, h, d, 0.04), wall, 0, 0.18 + h / 2, 0);
+  // timber frame
+  for (const sx of [-1, 1]) add(grp, G.rbox(0.06, h, 0.04, 0.01), M.timber, sx * (w / 2 - 0.03), 0.18 + h / 2, d / 2 + 0.01);
+  add(grp, G.rbox(w, 0.06, 0.04, 0.01), M.timber, 0, 0.18 + h - 0.03, d / 2 + 0.01);
+  add(grp, G.rbox(w, 0.05, 0.04, 0.01), M.timber, 0, 0.18 + h * 0.48, d / 2 + 0.01);
+  add(grp, G.prism(w + 0.18, roofH, d + 0.22), roof, 0, 0.18 + h, 0, { rot: [0, Math.PI / 2, 0] });
+  add(grp, G.rbox(0.22, 0.34, 0.05, 0.03), M.timber, 0, 0.35, d / 2 + 0.02);
+  windowPane(grp, M, -w * 0.28, 0.18 + h * 0.72, d / 2 + 0.025);
+  windowPane(grp, M, w * 0.28, 0.18 + h * 0.72, d / 2 + 0.025);
+  g.add(grp);
+  return 0.18 + h;
 }
 
-function hq(M, lv) {
+function townhall(M, lv) {
   const g = new THREE.Group();
   const anims = [];
-  foundation(g, M, 1.95, 1.95);
-  add(g, G.cyl(0.82, 0.88, 0.62, 40), M.wall, 0, 0.45, 0);
-  add(g, G.torus(0.84, 0.05, 8, 48), M.accent, 0, 0.72, 0, { rot: [Math.PI / 2, 0, 0] });
-  windowsRing(g, M, 0.86, 0.45, 12, 0.11);
-  add(g, G.dome(0.8), M.wallCool, 0, 0.76, 0, { scale: [1, 0.72, 1] });
-  add(g, G.dome(0.36), M.glass, 0, 1.3, 0, { scale: [1, 0.8, 1] });
-  add(g, G.cyl(0.36, 0.36, 0.06, 28), M.roof, 0, 1.3, 0);
-  // door
-  add(g, G.rbox(0.34, 0.42, 0.18, 0.06), M.roof, 0, 0.35, 0.82);
-  add(g, G.rbox(0.24, 0.32, 0.04, 0.04), M.window, 0, 0.34, 0.9, { cast: false });
-  // mast + beacon
-  add(g, G.cyl(0.025, 0.035, 0.9, 8), M.metal, 0.45, 1.35, -0.3);
-  const beacon = add(g, G.sph(0.06, 12, 8), M.beacon, 0.45, 1.82, -0.3, { dynamic: true, cast: false });
-  anims.push({ obj: beacon, type: 'blink', speed: 1.1 });
-  // banner in civilization colour
-  add(g, G.cyl(0.018, 0.018, 0.7, 6), M.metal, -0.72, 0.85, 0.55);
-  const flag = add(g, G.rbox(0.28, 0.18, 0.02, 0.01), M.accent, -0.58, 1.1, 0.55, { dynamic: true });
-  anims.push({ obj: flag, type: 'flutter', speed: 2.2 });
-  // side pods
-  for (const a of [0.9, -0.9, Math.PI - 0.6]) {
-    add(g, G.cap(0.18, 0.18, 6, 14), M.wallWarm, Math.sin(a) * 0.95, 0.32, Math.cos(a) * 0.95);
-  }
+  add(g, G.rbox(2.6, 0.12, 2.3, 0.05), M.stone, 0, 0.06, 0, { cast: false });
+  add(g, G.rbox(2.1, 0.55, 1.7, 0.06), M.stone, 0, 0.39, 0);
+  add(g, G.rbox(2.0, 0.6, 1.6, 0.04), M.plaster, 0, 0.96, 0);
+  for (const x of [-0.95, -0.32, 0.32, 0.95]) add(g, G.rbox(0.07, 0.6, 0.05, 0.01), M.timber, x, 0.96, 0.81);
+  add(g, G.rbox(2.0, 0.07, 0.05, 0.01), M.timber, 0, 1.25, 0.81);
+  add(g, G.prism(2.3, 0.85, 1.9), M.roofRed, 0, 1.26, 0, { rot: [0, Math.PI / 2, 0] });
+  // door and steps
+  add(g, G.rbox(0.42, 0.5, 0.08, 0.05), M.timber, 0, 0.37, 0.86);
+  add(g, G.rbox(0.7, 0.08, 0.3, 0.02), M.stoneDark, 0, 0.1, 1.02);
+  for (const x of [-0.65, 0.65]) windowPane(g, M, x, 0.42, 0.86, 0, 0.18, 0.22);
+  for (const x of [-0.65, 0, 0.65]) windowPane(g, M, x, 1.02, 0.82, 0, 0.16, 0.2);
+  // bell tower
+  const tH = 0.9 + (lv >= 5 ? 0.35 : 0);
+  add(g, G.rbox(0.55, tH, 0.55, 0.03), M.plasterWarm, 0, 1.75 + tH / 2 - 0.35, 0);
+  add(g, G.pyramid(0.48, 0.6), M.roofSlate, 0, 1.75 + tH - 0.35 + 0.3, 0);
+  windowPane(g, M, 0, 1.75 + tH - 0.6, 0.285, 0, 0.18, 0.2);
+  flag(g, M, anims, 0, 1.75 + tH + 0.25, 0, 0.5);
+  if (lv >= 4) { add(g, G.cyl(0.13, 0.13, 0.03, 20), M.white, 0, 1.75 + tH - 0.62, 0.29, { rot: [Math.PI / 2, 0, 0] }); add(g, G.rbox(0.02, 0.09, 0.01, 0.004), M.dark, 0, 1.75 + tH - 0.6, 0.31); }
   if (lv >= 2) {
-    add(g, G.cyl(0.55, 0.6, 0.3, 32), M.wall, 0, 1.02, 0);
-    windowsRing(g, M, 0.6, 1.04, 10, 0.08, 0.3);
+    house(g, M, { w: 0.8, d: 0.9, h: 0.55, x: -1.35, z: 0.05, ry: Math.PI / 2, roof: M.roofRed });
   }
   if (lv >= 3) {
-    const dish = new THREE.Group();
-    dish.position.set(-0.45, 1.25, -0.4);
-    add(dish, G.cyl(0.03, 0.03, 0.3, 8), M.metal, 0, 0.15, 0);
-    add(dish, G.sph(0.24, 20, 10, TAU, 0, Math.PI / 2.5), M.wallCool, 0, 0.35, 0, { rot: [Math.PI * 0.7, 0, 0] });
-    dish.userData.dynamic = true;
-    g.add(dish);
-    anims.push({ obj: dish, type: 'spin', axis: 'y', speed: 0.25 });
+    house(g, M, { w: 0.8, d: 0.9, h: 0.55, x: 1.35, z: 0.05, ry: -Math.PI / 2, roof: M.roofRed });
+    for (const x of [-0.6, 0.6]) add(g, G.rbox(0.18, 0.4, 0.02, 0.01), M.accent, x, 0.95, 0.83);
   }
-  lamp(g, M, 0.75, 0.8);
+  if (lv >= 5) add(g, G.cone(0.05, 0.25, 8), M.gold, 0, 1.75 + tH + 0.1, 0);
+  // plaza well
+  add(g, G.cyl(0.22, 0.24, 0.25, 16), M.stone, 1.25, 0.12, 1.3);
+  add(g, G.cyl(0.17, 0.17, 0.02, 16), M.water, 1.25, 0.24, 1.3, { cast: false });
   return { g, anims };
 }
 
-function extractor(M, lv) {
+function archery(M, lv) {
   const g = new THREE.Group();
   const anims = [];
-  foundation(g, M);
-  add(g, G.rbox(1.0, 0.55, 0.9, 0.1), M.wall, -0.35, 0.42, 0.35);
-  add(g, G.rbox(1.02, 0.08, 0.92, 0.04), M.hazard, -0.35, 0.68, 0.35);
-  add(g, G.rbox(0.18, 0.18, 0.04, 0.03), M.window, -0.55, 0.45, 0.82, { cast: false });
-  add(g, G.rbox(0.18, 0.18, 0.04, 0.03), M.window, -0.2, 0.45, 0.82, { cast: false });
-  // derrick
-  const H = 1.7 + Math.min(lv, 10) * 0.04;
-  const legs = [[0.28, -0.28], [0.68, -0.28], [0.28, -0.68], [0.68, -0.68]].map(([x, z]) => [x * 0.9 + 0.1, z * 0.9 + 0.1]);
-  for (const [x, z] of legs) add(g, G.cyl(0.035, 0.045, H, 8), M.metal, x, 0.14 + H / 2, z);
-  for (const y of [0.6, 1.1, H - 0.05]) {
-    add(g, G.rbox(0.48, 0.05, 0.05, 0.02), M.metal, 0.46, y, -0.08 - 0.13);
-    add(g, G.rbox(0.48, 0.05, 0.05, 0.02), M.metal, 0.46, y, -0.44 - 0.07);
-    add(g, G.rbox(0.05, 0.05, 0.42, 0.02), M.metal, 0.33, y, -0.37);
-    add(g, G.rbox(0.05, 0.05, 0.42, 0.02), M.metal, 0.69, y, -0.37);
+  const H = 2.0 + Math.min(lv, 10) * 0.08;
+  add(g, G.cyl(0.62, 0.7, 0.2, 20), M.stoneDark, 0, 0.1, 0);
+  add(g, G.cyl(0.5, 0.58, H, 20), M.stone, 0, H / 2 + 0.1, 0);
+  for (let i = 0; i < 4; i++) { const a = (i / 4) * TAU + 0.4; add(g, G.rbox(0.09, 0.2, 0.04, 0.015), M.dark, Math.cos(a) * 0.53, 0.7 + i * 0.32, Math.sin(a) * 0.53, { rot: [0, -a + Math.PI / 2, 0] }); }
+  // platform + crenellations
+  add(g, G.cyl(0.72, 0.62, 0.16, 20), M.wood, 0, H + 0.18, 0);
+  for (let i = 0; i < 10; i++) { const a = (i / 10) * TAU; add(g, G.rbox(0.16, 0.2, 0.1, 0.02), M.stone, Math.cos(a) * 0.66, H + 0.36, Math.sin(a) * 0.66, { rot: [0, -a, 0] }); }
+  // roof on posts
+  for (let i = 0; i < 4; i++) { const a = (i / 4) * TAU + Math.PI / 4; add(g, G.cyl(0.025, 0.025, 0.65, 6), M.timber, Math.cos(a) * 0.5, H + 0.55, Math.sin(a) * 0.5); }
+  add(g, G.cone(0.85, 0.65, 16), lv >= 10 ? M.gold : M.roofRed, 0, H + 1.18, 0);
+  flag(g, M, anims, 0, H + 1.45, 0, 0.45);
+  // archers on top
+  const archers = 1 + Math.floor(lv / 3);
+  for (let i = 0; i < archers; i++) {
+    const a = (i / archers) * TAU - Math.PI / 2;
+    const p = new THREE.Group();
+    p.position.set(Math.cos(a) * 0.32, H + 0.26, Math.sin(a) * 0.32);
+    add(p, G.cap(0.07, 0.12, 4, 8), M.leafDark, 0, 0.13, 0);
+    add(p, G.sph(0.065, 10, 8), M.plasterWarm, 0, 0.3, 0);
+    add(p, G.torus(0.11, 0.008, 4, 12, Math.PI), M.timber, 0.09, 0.2, 0, { rot: [0, Math.PI / 2, Math.PI / 2] });
+    p.userData.dynamic = true;
+    g.add(p);
+    anims.push({ obj: p, type: 'archer', phase: i * 1.7 });
   }
-  const wheel = new THREE.Group();
-  wheel.position.set(0.51, H + 0.22, -0.37);
-  add(wheel, G.torus(0.22, 0.04, 8, 28), trim(lv, M));
-  add(wheel, G.rbox(0.42, 0.04, 0.04, 0.015), M.metal);
-  add(wheel, G.rbox(0.04, 0.42, 0.04, 0.015), M.metal);
-  wheel.userData.dynamic = true;
-  g.add(wheel);
-  anims.push({ obj: wheel, type: 'spin', axis: 'z', speed: 2.4 });
-  const drill = new THREE.Group();
-  drill.position.set(0.51, 0.55, -0.37);
-  add(drill, G.cyl(0.05, 0.05, 0.9, 10), M.metal, 0, 0.35, 0);
-  add(drill, G.cone(0.14, 0.32, 14), M.hazard, 0, -0.12, 0, { rot: [Math.PI, 0, 0] });
-  drill.userData.dynamic = true;
-  g.add(drill);
-  anims.push({ obj: drill, type: 'drill', speed: 6 });
-  // ore pile
-  const pile = [[-0.55, -0.45, 0.16], [-0.38, -0.6, 0.12], [-0.68, -0.68, 0.11], [-0.5, -0.75, 0.09]];
-  for (const [x, z, r] of pile) add(g, G.ico(r, 0), M.ore, x, 0.14 + r * 0.6, z, { rot: [x * 3, z * 5, 0] });
-  if (lv >= 3) add(g, G.rbox(0.9, 0.08, 0.16, 0.03), M.dark, -0.1, 0.4, -0.55, { rot: [0, 0.4, 0.25] });
-  if (lv >= 5) { for (const [x, z, r] of [[-0.2, -0.82, 0.13], [-0.05, -0.7, 0.1]]) add(g, G.ico(r, 0), M.ore, x, 0.14 + r * 0.6, z); lamp(g, M, 0.8, 0.75); }
-  if (lv >= 7) { add(g, G.rbox(0.42, 0.36, 0.4, 0.08), M.wallCool, -0.35, 0.86, 0.35); add(g, G.rbox(0.3, 0.12, 0.04, 0.02), M.window, -0.35, 0.9, 0.56, { cast: false }); }
-  if (lv >= 10) add(g, G.cone(0.08, 0.2, 12), M.brass, 0.51, H + 0.5, -0.37);
+  // practice yard
+  add(g, G.cyl(0.18, 0.18, 0.04, 16), M.hay, 0.95, 0.3, 0.2, { rot: [Math.PI / 2, 0, 0.3] });
+  add(g, G.cyl(0.03, 0.03, 0.35, 6), M.timber, 0.95, 0.15, 0.18);
+  add(g, G.cyl(0.2, 0.22, 0.3, 12), M.hay, -0.85, 0.15, 0.45);
+  if (lv >= 3) torch(g, M, 0.62, 0.9, 0.3);
+  if (lv >= 6) add(g, G.rbox(0.18, 0.5, 0.02, 0.01), M.accent, 0, H * 0.55, 0.57);
+  return { g, anims, top: H + 0.4 };
+}
+
+function farmstead(M, lv) {
+  const g = new THREE.Group();
+  const anims = [];
+  house(g, M, { w: 1.1, d: 0.9, h: 0.6, x: 0.2, z: 0.25, wall: M.wood, roof: M.roofThatch, roofH: 0.6 });
+  // fields (outward = −x side in local space)
+  const fields = [[-0.75, -0.55, M.crop], [-0.75, 0.35, M.leaf], [0.3, -0.75, M.crop]];
+  for (const [x, z, crop] of fields) {
+    add(g, G.rbox(0.75, 0.06, 0.65, 0.03), M.soil, x, 0.03, z, { cast: false });
+    for (let r = 0; r < 3; r++) for (let c = 0; c < 4; c++) add(g, G.cone(0.05, 0.16, 5), crop, x - 0.27 + c * 0.18, 0.13, z - 0.2 + r * 0.2);
+  }
+  add(g, G.cyl(0.18, 0.2, 0.28, 12), M.hay, 0.85, 0.14, -0.35);
+  add(g, G.sph(0.19, 12, 8), M.hay, 0.85, 0.3, -0.35, { scale: [1, 0.6, 1] });
+  // fence
+  for (let i = 0; i < 6; i++) add(g, G.rbox(0.03, 0.18, 0.03, 0.01), M.woodLight, -1.15, 0.09, -0.85 + i * 0.32);
+  add(g, G.rbox(0.02, 0.03, 1.65, 0.01), M.woodLight, -1.15, 0.14, -0.05);
+  // the very proud goat
+  const goat = new THREE.Group();
+  goat.position.set(0.75, 0, 0.75);
+  add(goat, G.rbox(0.22, 0.12, 0.1, 0.04), M.white, 0, 0.15, 0);
+  add(goat, G.rbox(0.08, 0.08, 0.07, 0.03), M.white, 0.13, 0.22, 0);
+  add(goat, G.cone(0.012, 0.06, 4), M.dark, 0.13, 0.28, 0.02, { rot: [0, 0, -0.4] });
+  for (const [x, z] of [[-0.07, -0.03], [-0.07, 0.03], [0.07, -0.03], [0.07, 0.03]]) add(goat, G.cyl(0.012, 0.012, 0.1, 4), M.white, x, 0.05, z);
+  goat.userData.dynamic = true;
+  g.add(goat);
+  anims.push({ obj: goat, type: 'graze' });
   return { g, anims };
 }
 
-function farm(M, lv) {
+function lumber(M, lv) {
   const g = new THREE.Group();
   const anims = [];
-  foundation(g, M);
-  const L = 1.55;
-  // greenhouse frame + glass
-  add(g, G.rbox(0.9, 0.12, L, 0.04), M.wall, -0.1, 0.2, 0);
-  for (const z of [-L / 2, -L / 4, 0, L / 4, L / 2]) {
-    add(g, G.torus(0.45, 0.03, 6, 24, Math.PI), z === -L / 2 || z === L / 2 ? M.wall : M.metal, -0.1, 0.25, z * 0.98);
-  }
-  add(g, G.halfCyl(0.45, L), M.glass, -0.1, 0.25, 0, { rot: [0, Math.PI / 2, 0], cast: false });
-  // planters and plants
-  for (const x of [-0.3, 0.1]) {
-    add(g, G.rbox(0.2, 0.12, L - 0.2, 0.03), M.soil, x, 0.3, 0);
-    for (let i = 0; i < 6; i++) {
-      const z = -L / 2 + 0.22 + i * ((L - 0.44) / 5);
-      add(g, G.sph(0.09 + ((i * 7 + (x > 0 ? 3 : 0)) % 3) * 0.015, 10, 8), i % 2 ? M.leaf : M.leafDark, x, 0.42, z, { scale: [1, 0.85, 1] });
+  house(g, M, { w: 0.85, d: 0.75, h: 0.5, x: -0.25, z: 0.3, wall: M.wood, roof: M.roofSlate, roofH: 0.45 });
+  for (let r = 0; r < 3; r++) for (let c = 0; c < 3 - r; c++) add(g, G.cyl(0.09, 0.09, 0.8, 10), M.woodLight, 0.55, 0.09 + r * 0.16, -0.3 + (c - (2 - r) / 2) * 0.19, { rot: [0, 0, Math.PI / 2] });
+  for (let r = 0; r < 2; r++) for (let c = 0; c < 2; c++) add(g, G.cyl(0.08, 0.08, 0.6, 10), M.wood, -0.6 + c * 0.17, 0.08 + r * 0.15, -0.55, { rot: [Math.PI / 2, 0, 0] });
+  add(g, G.cyl(0.14, 0.16, 0.2, 12), M.wood, 0.6, 0.1, 0.55);
+  add(g, G.rbox(0.18, 0.03, 0.08, 0.01), M.iron, 0.62, 0.24, 0.55, { rot: [0, 0.5, 0.6] });
+  for (const [x, z] of [[0.85, 0.05], [-0.9, 0.25]]) add(g, G.cyl(0.1, 0.12, 0.12, 10), M.wood, x, 0.06, z);
+  return { g, anims };
+}
+
+function ruin(M, id) {
+  const r = seeded([...id].reduce((a, c) => a * 31 + c.charCodeAt(0), 7));
+  const g = new THREE.Group();
+  const anims = [];
+  const w = 1.3 + r() * 0.3;
+  const d = 1.05 + r() * 0.25;
+  add(g, G.rbox(w + 0.1, 0.12, d + 0.1, 0.04), M.stoneDark, 0, 0.06, 0, { cast: false });
+  const walls = [[0, -d / 2, w, 0], [-w / 2, 0, d, Math.PI / 2], [w / 2, 0, d, Math.PI / 2], [0, d / 2, w, 0]];
+  for (const [x, z, len, ry] of walls) {
+    const segs = 3;
+    for (let k = 0; k < segs; k++) {
+      if (r() < 0.3) continue;
+      const h = 0.12 + r() * (r() < 0.3 ? 0.65 : 0.3);
+      const off = (k - (segs - 1) / 2) * (len / segs);
+      add(g, G.rbox(len / segs - 0.03, h, 0.12, 0.03), r() < 0.35 ? M.stoneMoss : M.stone, x + Math.cos(ry) * off, 0.12 + h / 2, z - Math.sin(ry) * off);
     }
   }
-  const lights = add(g, G.rbox(0.06, 0.03, L - 0.3, 0.01), M.growLight, -0.1, 0.62, 0, { cast: false });
-  lights.userData.glow = true;
-  // pump
-  add(g, G.cyl(0.14, 0.14, 0.4, 16), M.wallCool, 0.66, 0.34, 0.55);
-  add(g, G.torus(0.14, 0.025, 6, 20), M.accent, 0.66, 0.44, 0.55, { rot: [Math.PI / 2, 0, 0] });
-  if (lv >= 3) {
-    add(g, G.halfCyl(0.25, 0.8), M.glass, 0.62, 0.15, -0.35, { cast: false });
-    add(g, G.rbox(0.3, 0.08, 0.7, 0.03), M.soil, 0.62, 0.2, -0.35);
-    for (let i = 0; i < 3; i++) add(g, G.sph(0.08, 8, 6), M.leaf, 0.62, 0.28, -0.6 + i * 0.25);
-  }
-  if (lv >= 5) { add(g, G.cyl(0.16, 0.16, 0.5, 18), M.teal, 0.66, 0.39, 0.1); add(g, G.dome(0.16), M.teal, 0.66, 0.64, 0.1); }
-  if (lv >= 7) for (const z of [-0.6, 0.6]) add(g, G.rbox(0.04, 0.3, 0.3, 0.01), M.panel, 0.36, 0.55, z, { rot: [0, 0, -0.5] });
-  if (lv >= 10) add(g, G.torus(0.47, 0.025, 6, 24, Math.PI), M.brass, -0.1, 0.25, 0, { rot: [0, Math.PI / 2, 0] });
+  add(g, G.rbox(0.07, 0.07, w * 0.9, 0.02), M.timber, (r() - 0.5) * 0.4, 0.2, 0, { rot: [0.3, r() * 3, 0.45] });
+  for (let i = 0; i < 6; i++) add(g, G.ico(0.07 + r() * 0.08, 0), M.stone, (r() - 0.5) * w, 0.12, (r() - 0.5) * d, { rot: [r() * 3, r() * 3, 0] });
+  for (let i = 0; i < 4; i++) add(g, G.sph(0.08 + r() * 0.08, 8, 6), r() < 0.5 ? M.leaf : M.leafDark, (r() - 0.5) * w * 1.1, 0.12, (r() - 0.5) * d * 1.1, { scale: [1, 0.7, 1] });
+  // a sign post waiting for restoration
+  add(g, G.cyl(0.02, 0.02, 0.5, 6), M.timber, w / 2 + 0.05, 0.25, d / 2 + 0.05);
+  add(g, G.rbox(0.26, 0.16, 0.02, 0.01), M.woodLight, w / 2 + 0.05, 0.45, d / 2 + 0.07, { rot: [0, 0.3, 0] });
   return { g, anims };
 }
 
-function lab(M, lv) {
+function watchtowerRuin(M) {
   const g = new THREE.Group();
-  const anims = [];
-  foundation(g, M);
-  add(g, G.rbox(1.25, 0.62, 1.05, 0.12), M.wall, -0.1, 0.45, 0.15);
-  add(g, G.rbox(1.27, 0.07, 1.07, 0.03), M.accent, -0.1, 0.28, 0.15);
-  for (const x of [-0.5, -0.2, 0.1, 0.4]) add(g, G.rbox(0.14, 0.2, 0.04, 0.03), M.window, x, 0.52, 0.69, { cast: false });
-  add(g, G.dome(0.42), M.wallCool, -0.1, 0.76, 0.1);
-  add(g, G.rbox(0.12, 0.3, 0.86, 0.04), M.dark, -0.1, 0.92, 0.1, { rot: [0, 0.6, 0] });
-  const ring = add(g, G.torus(0.56, 0.03, 8, 48), trim(lv, M), -0.1, 0.95, 0.1, { rot: [Math.PI / 2.4, 0, 0], dynamic: true });
-  anims.push({ obj: ring, type: 'spin', axis: 'y', speed: 0.8, world: true });
-  // pulsing orb pedestal
-  add(g, G.cyl(0.08, 0.12, 0.42, 14), M.metal, 0.68, 0.35, -0.6);
-  const orb = add(g, G.sph(0.12, 18, 12), M.orb, 0.68, 0.68, -0.6, { dynamic: true, cast: false });
-  anims.push({ obj: orb, type: 'pulse', speed: 2.2 });
-  if (lv >= 3) for (const x of [-0.6, -0.45]) { add(g, G.cyl(0.015, 0.015, 0.5, 6), M.metal, x, 1.0, -0.25); add(g, G.sph(0.03, 8, 6), M.beacon, x, 1.26, -0.25, { cast: false }); }
-  if (lv >= 5) { const r2 = add(g, G.torus(0.48, 0.02, 6, 40), M.metal, -0.1, 0.95, 0.1, { rot: [-Math.PI / 2.6, 0, 0], dynamic: true }); anims.push({ obj: r2, type: 'spin', axis: 'y', speed: -0.6, world: true }); }
-  if (lv >= 7) { add(g, G.rbox(0.5, 0.42, 0.6, 0.1), M.wallWarm, 0.6, 0.35, 0.45); add(g, G.rbox(0.04, 0.16, 0.3, 0.02), M.window, 0.86, 0.4, 0.45, { cast: false }); }
-  if (lv >= 10) add(g, G.cone(0.1, 0.5, 6), M.orb, 0.68, 1.05, -0.6, { cast: false });
-  return { g, anims };
+  add(g, G.cyl(0.55, 0.62, 0.9, 14, false), M.stone, 0, 0.45, 0);
+  add(g, G.cyl(0.48, 0.5, 0.25, 14), M.stoneMoss, 0, 1.0, 0, { rot: [0.15, 0, 0.1] });
+  for (let i = 0; i < 4; i++) add(g, G.ico(0.1, 0), M.stone, Math.cos(i * 1.7) * 0.75, 0.08, Math.sin(i * 1.7) * 0.75);
+  return { g, anims: [] };
 }
 
-function solar(M, lv) {
+const BUILDERS = { townhall, archery, farmstead, lumber };
+
+export function buildBuilding(id, level, M) {
+  let res;
+  if (id === 'watchtower') res = watchtowerRuin(M);
+  else if (level < 1) res = ruin(M, id);
+  else res = (BUILDERS[id] || ((m) => ruin(m, id)))(M, level);
+  finalize(res.g);
+  res.g.userData.anims = res.anims;
+  res.g.userData.top = res.top || 1.8;
+  return res.g;
+}
+
+// The ring of walls. Palisade for levels 1–3, stone from 4, towers from 7.
+export function buildWalls(M, lv, anims) {
   const g = new THREE.Group();
-  const anims = [];
-  foundation(g, M);
-  const rows = lv >= 6 ? 3 : 2;
-  const cols = lv >= 3 ? 3 : 2;
-  const tracker = new THREE.Group();
-  tracker.userData.dynamic = true;
-  for (let r = 0; r < rows; r++) {
-    for (let c = 0; c < cols; c++) {
-      const x = (c - (cols - 1) / 2) * (1.6 / cols);
-      const z = (r - (rows - 1) / 2) * (1.55 / rows);
-      add(g, G.cyl(0.03, 0.04, 0.32, 8), M.metal, x, 0.3, z);
-      const panel = new THREE.Group();
-      panel.position.set(x, 0.48, z);
-      add(panel, G.rbox(1.45 / cols, 0.04, 1.35 / rows, 0.015), M.metal, 0, -0.01, 0);
-      add(panel, G.rbox(1.45 / cols - 0.06, 0.03, 1.35 / rows - 0.06, 0.01), M.panel, 0, 0.012, 0);
-      panel.userData.dynamic = true;
-      g.add(panel);
-      anims.push({ obj: panel, type: 'track' });
+  const gateA = Math.PI / 2; // south
+  const gap = 0.32; // radians kept for the gatehouse
+  const stone = lv >= 4;
+  const H = (stone ? 0.75 : 0.6) + lv * 0.04;
+  if (!stone) {
+    const n = Math.round((TAU * WALL_R) / 0.24);
+    for (let i = 0; i < n; i++) {
+      const a = (i / n) * TAU;
+      if (Math.abs(((a - gateA + Math.PI) % TAU) - Math.PI) < gap) continue;
+      const h = H + ((i * 7) % 5) * 0.03;
+      add(g, G.cyl(0.11, 0.12, h, 7), M.wood, Math.cos(a) * WALL_R, h / 2, Math.sin(a) * WALL_R);
+      add(g, G.cone(0.11, 0.16, 7), M.wood, Math.cos(a) * WALL_R, h + 0.08, Math.sin(a) * WALL_R);
+    }
+    // inner walkway beam
+    const m = 48;
+    for (let i = 0; i < m; i++) {
+      const a = ((i + 0.5) / m) * TAU;
+      if (Math.abs(((a - gateA + Math.PI) % TAU) - Math.PI) < gap + 0.05) continue;
+      add(g, G.rbox(0.08, 0.06, (TAU * (WALL_R - 0.18)) / m, 0.01), M.timber, Math.cos(a) * (WALL_R - 0.18), H * 0.6, Math.sin(a) * (WALL_R - 0.18), { rot: [0, -a, 0] });
+    }
+  } else {
+    const m = 72;
+    const seg = (TAU * WALL_R) / m;
+    for (let i = 0; i < m; i++) {
+      const a = ((i + 0.5) / m) * TAU;
+      if (Math.abs(((a - gateA + Math.PI) % TAU) - Math.PI) < gap) continue;
+      const x = Math.cos(a) * WALL_R, z = Math.sin(a) * WALL_R;
+      add(g, G.rbox(0.32, H, seg + 0.02, 0.03), i % 2 ? M.stone : M.stoneDark, x, H / 2, z, { rot: [0, -a, 0] });
+      if (i % 2 === 0) add(g, G.rbox(0.34, 0.16, seg * 0.55, 0.02), M.stone, x, H + 0.08, z, { rot: [0, -a, 0] });
     }
   }
-  if (lv >= 5) { add(g, G.rbox(0.3, 0.2, 0.2, 0.05), M.wallCool, 0.78, 0.24, 0.8); add(g, G.sph(0.03, 8, 6), M.statusGreen, 0.78, 0.36, 0.91, { cast: false }); }
-  if (lv >= 10) add(g, G.rbox(1.9, 0.03, 0.06, 0.01), M.brass, 0, 0.15, 0.93);
-  return { g, anims, tracker };
-}
-
-function depot(M, lv) {
-  const g = new THREE.Group();
-  const anims = [];
-  foundation(g, M);
-  const h = 0.95 * (1 + (lv - 1) * 0.06);
-  const silos = lv >= 4 ? [[-0.5, -0.45], [0.1, -0.5], [-0.55, 0.15]] : [[-0.5, -0.45], [0.1, -0.5]];
-  for (const [x, z] of silos) {
-    add(g, G.cyl(0.3, 0.3, h, 24), M.wall, x, 0.14 + h / 2, z);
-    add(g, G.dome(0.3, 20), M.wallCool, x, 0.14 + h, z);
-    add(g, G.torus(0.305, 0.025, 6, 28), M.accent, x, 0.14 + h * 0.3, z, { rot: [Math.PI / 2, 0, 0] });
-    add(g, G.torus(0.305, 0.025, 6, 28), M.accent, x, 0.14 + h * 0.7, z, { rot: [Math.PI / 2, 0, 0] });
-  }
-  const crates = [[0.45, 0.45, M.ore], [0.45, 0.05, M.fuelTank], [0.1, 0.5, M.foodCrate], [0.45, 0.45, M.foodCrate, 1]];
-  for (const [x, z, mat, stack] of crates) add(g, G.rbox(0.34, 0.3, 0.34, 0.05), mat === M.ore ? M.wallCool : mat, x, 0.29 + (stack ? 0.31 : 0), z);
-  if (lv >= 3) add(g, G.rbox(0.34, 0.3, 0.34, 0.05), M.fuelTank, 0.1, 0.29, 0.1);
+  // towers
   if (lv >= 7) {
-    add(g, G.cyl(0.03, 0.03, 1.3, 8), M.hazard, 0.8, 0.8, -0.8);
-    const arm = new THREE.Group();
-    arm.position.set(0.8, 1.45, -0.8);
-    add(arm, G.rbox(0.9, 0.05, 0.05, 0.02), M.hazard, -0.35, 0, 0);
-    add(arm, G.cyl(0.006, 0.006, 0.4, 4), M.dark, -0.7, -0.2, 0, { cast: false });
-    arm.userData.dynamic = true;
-    g.add(arm);
-    anims.push({ obj: arm, type: 'sway', speed: 0.4 });
+    for (let k = 0; k < 8; k++) {
+      const a = (k / 8) * TAU + TAU / 16;
+      if (Math.abs(((a - gateA + Math.PI) % TAU) - Math.PI) < 0.5) continue;
+      const x = Math.cos(a) * WALL_R, z = Math.sin(a) * WALL_R;
+      add(g, G.cyl(0.36, 0.4, H + 0.55, 14), M.stone, x, (H + 0.55) / 2, z);
+      add(g, G.cone(0.48, 0.5, 14), lv >= 10 ? M.gold : M.roofSlate, x, H + 0.8, z);
+    }
   }
-  if (lv >= 10) for (const [x, z] of silos) add(g, G.cone(0.06, 0.16, 10), M.brass, x, 0.14 + h + 0.36, z);
-  return { g, anims };
+  // gatehouse
+  const gx = Math.cos(gateA) * WALL_R, gz = Math.sin(gateA) * WALL_R;
+  for (const s of [-1, 1]) {
+    const a = gateA + s * (gap - 0.06);
+    const tx = Math.cos(a) * WALL_R, tz = Math.sin(a) * WALL_R;
+    add(g, G.cyl(0.36, 0.42, H + 0.7, 12), stone ? M.stone : M.wood, tx, (H + 0.7) / 2, tz);
+    add(g, G.cone(0.5, 0.5, 12), M.roofRed, tx, H + 0.95, tz);
+    torch(g, M, tx, H + 0.1, tz + 0.42);
+  }
+  add(g, G.rbox(1.9, 0.2, 0.36, 0.04), stone ? M.stoneDark : M.timber, gx, H + 0.3, gz);
+  add(g, G.rbox(1.25, H, 0.1, 0.02), M.timber, gx, H / 2, gz + 0.02);
+  for (let i = 0; i < 4; i++) add(g, G.rbox(0.04, H, 0.12, 0.01), M.iron, gx - 0.45 + i * 0.3, H / 2, gz + 0.03);
+  add(g, G.rbox(0.5, 0.32, 0.02, 0.01), M.accent, gx, H + 0.05, gz + 0.2);
+  // torches around the ring for night readability
+  for (let k = 0; k < 12; k++) {
+    const a = (k / 12) * TAU;
+    if (Math.abs(((a - gateA + Math.PI) % TAU) - Math.PI) < 0.5) continue;
+    torch(g, M, Math.cos(a) * (WALL_R - 0.25), H * 0.7, Math.sin(a) * (WALL_R - 0.25));
+  }
+  finalize(g);
+  g.userData.height = H;
+  return g;
 }
 
-function habitat(M, lv) {
+export function buildPortal(M, open, mossy) {
   const g = new THREE.Group();
   const anims = [];
-  foundation(g, M);
-  const tiers = lv >= 6 ? 3 : lv >= 3 ? 2 : 1;
-  for (let t = 0; t < tiers; t++) {
-    const y = 0.38 + t * 0.44;
-    const rot = t % 2 ? 0.35 : -0.15;
-    const pod = new THREE.Group();
-    pod.position.set(0, y, 0);
-    pod.rotation.y = rot;
-    add(pod, G.cap(0.24, 0.85, 8, 20), t % 2 ? M.wallWarm : M.wall, 0, 0, 0, { rot: [0, 0, Math.PI / 2] });
-    for (let i = 0; i < 4; i++) add(pod, G.circle(0.065, 16), M.window, -0.42 + i * 0.28, 0.02, 0.243, { cast: false });
-    add(pod, G.torus(0.245, 0.02, 6, 24), M.accent, 0.42, 0, 0, { rot: [0, Math.PI / 2, 0] });
-    add(pod, G.torus(0.245, 0.02, 6, 24), M.accent, -0.42, 0, 0, { rot: [0, Math.PI / 2, 0] });
-    g.add(pod);
+  add(g, G.rbox(1.5, 0.1, 0.8, 0.04), M.stoneDark, 0, 0.05, 0, { cast: false });
+  for (const s of [-1, 1]) add(g, G.rbox(0.28, 1.25, 0.32, 0.05), mossy ? M.stoneMoss : M.stone, s * 0.55, 0.67, 0);
+  add(g, G.torus(0.55, 0.15, 8, 20, Math.PI), mossy ? M.stoneMoss : M.stone, 0, 1.28, 0, { scale: [1, 0.8, 1.1] });
+  add(g, G.rbox(0.16, 0.22, 0.34, 0.03), M.stoneDark, 0, 1.78, 0);
+  for (let i = 0; i < 3; i++) add(g, G.rbox(0.06, 0.12, 0.02, 0.01), M.rune, -0.55 + 0.0, 0.5 + i * 0.3, 0.17, { cast: false });
+  for (let i = 0; i < 3; i++) add(g, G.rbox(0.06, 0.12, 0.02, 0.01), M.rune, 0.55, 0.5 + i * 0.3, 0.17, { cast: false });
+  for (let i = 0; i < 5; i++) add(g, G.sph(0.12, 8, 6), M.leafDark, -0.75 + (i % 3) * 0.75, 0.15 + (i > 2 ? 1.0 : 0.1), 0.15 * (i % 2 ? 1 : -1), { scale: [1.2, 0.7, 1] });
+  if (open) {
+    const disc = add(g, G.circle(0.5, 28), M.portal, 0, 0.88, 0, { dynamic: true, cast: false, scale: [0.95, 1.45, 1] });
+    anims.push({ obj: disc, type: 'portal' });
+  } else {
+    for (const [x, y] of [[-0.18, 0.35], [0.18, 0.4], [0, 0.75], [-0.15, 1.05], [0.15, 1.1]]) add(g, G.ico(0.2, 0), M.stoneDark, x, y, 0, { rot: [x * 5, y * 3, 0] });
+    for (let i = 0; i < 4; i++) add(g, G.cyl(0.02, 0.02, 1.2, 5), M.leafDark, -0.3 + i * 0.2, 0.75, 0.12, { rot: [0, 0, (i - 1.5) * 0.25] });
   }
-  add(g, G.rbox(0.3, 0.4, 0.14, 0.05), M.roof, 0.65, 0.34, 0.55);
-  add(g, G.rbox(0.2, 0.28, 0.03, 0.03), M.window, 0.65, 0.34, 0.63, { cast: false });
-  // planter and bench
-  add(g, G.rbox(0.36, 0.12, 0.18, 0.04), M.soil, -0.55, 0.2, 0.7);
-  for (const x of [-0.66, -0.44]) add(g, G.sph(0.08, 10, 8), M.leaf, x, 0.32, 0.7);
-  lamp(g, M, -0.8, -0.75, 0.5);
-  if (lv >= 10) add(g, G.dome(0.22), M.glass, 0, 0.38 + (tiers - 1) * 0.44 + 0.24, 0, { cast: false });
-  if (lv >= 5) add(g, G.cyl(0.018, 0.018, 0.5, 6), M.metal, 0.3, 0.38 + (tiers - 1) * 0.44 + 0.42, -0.1);
-  return { g, anims };
-}
-
-function refinery(M, lv) {
-  const g = new THREE.Group();
-  const anims = [];
-  foundation(g, M);
-  const tanks = lv >= 4 ? [[-0.5, -0.4, 0.3], [0.05, -0.55, 0.26], [-0.55, 0.3, 0.24]] : [[-0.5, -0.4, 0.3], [0.05, -0.55, 0.26]];
-  for (const [x, z, r] of tanks) {
-    const h = 0.7;
-    add(g, G.cyl(r, r, h, 22), M.fuelTank, x, 0.14 + h / 2 + 0.06, z);
-    add(g, G.dome(r, 20), M.fuelTank, x, 0.2 + h, z);
-    add(g, G.dome(r, 20), M.fuelTank, x, 0.2, z, { rot: [Math.PI, 0, 0] });
-    add(g, G.torus(r + 0.005, 0.02, 6, 24), M.dark, x, 0.2 + h * 0.5, z, { rot: [Math.PI / 2, 0, 0] });
-  }
-  add(g, G.rbox(0.62, 0.5, 0.6, 0.08), M.wall, 0.42, 0.39, 0.4);
-  add(g, G.rbox(0.2, 0.14, 0.04, 0.03), M.window, 0.42, 0.45, 0.71, { cast: false });
-  // pipes
-  add(g, G.cyl(0.04, 0.04, 0.9, 8), M.metal, -0.2, 0.5, 0.05, { rot: [0, 0, Math.PI / 2] });
-  add(g, G.torus(0.2, 0.04, 6, 16, Math.PI / 2), M.metal, 0.25, 0.3, 0.05, { rot: [0, 0, 0] });
-  // chimney with flame
-  add(g, G.cyl(0.07, 0.1, 1.25, 12), M.wallCool, 0.65, 0.76, -0.55);
-  add(g, G.torus(0.08, 0.02, 6, 16), M.hazard, 0.65, 1.32, -0.55, { rot: [Math.PI / 2, 0, 0] });
-  const flame = add(g, G.cone(0.06, 0.2, 10), M.flame, 0.65, 1.47, -0.55, { dynamic: true, cast: false });
-  anims.push({ obj: flame, type: 'flame', speed: 9 });
-  if (lv >= 7) lamp(g, M, -0.85, 0.8);
-  if (lv >= 10) add(g, G.torus(0.27, 0.02, 6, 24), M.brass, -0.5, 0.95, -0.4, { rot: [Math.PI / 2, 0, 0] });
-  return { g, anims, smoke: new THREE.Vector3(0.65, 1.55, -0.55) };
-}
-
-const BUILDERS = { hq, extractor, farm, lab, solar, depot, habitat, refinery };
-
-export function buildModel(type, level, M) {
-  const make = BUILDERS[type];
-  const { g, anims, smoke } = make ? make(M, Math.max(1, level)) : hq(M, 1);
   finalize(g);
   g.userData.anims = anims;
-  g.userData.smoke = smoke || null;
   return g;
 }
 
-// Scaffolding and a little crane, used while constructing or upgrading.
-export function buildScaffold(M, height = 1.5) {
-  const g = new THREE.Group();
-  const s = 0.92;
-  for (const [x, z] of [[-s, -s], [s, -s], [-s, s], [s, s]]) add(g, G.cyl(0.025, 0.025, height, 6), M.scaffold, x, height / 2 + 0.12, z);
-  for (let y = 0.45; y < height; y += 0.45) {
-    add(g, G.rbox(1.88, 0.03, 0.03, 0.01), M.scaffold, 0, y, s);
-    add(g, G.rbox(1.88, 0.03, 0.03, 0.01), M.scaffold, 0, y, -s);
-    add(g, G.rbox(0.03, 0.03, 1.88, 0.01), M.scaffold, s, y, 0);
-    add(g, G.rbox(0.03, 0.03, 1.88, 0.01), M.scaffold, -s, y, 0);
-  }
-  finalize(g);
-  const crane = new THREE.Group();
-  crane.position.set(-s, 0, -s);
-  add(crane, G.cyl(0.03, 0.03, height + 0.6, 6), M.hazard, 0, (height + 0.6) / 2, 0);
-  const jib = new THREE.Group();
-  jib.position.y = height + 0.6;
-  add(jib, G.rbox(1.4, 0.05, 0.05, 0.02), M.hazard, 0.5, 0, 0);
-  add(jib, G.cyl(0.005, 0.005, 0.5, 4), M.dark, 1.0, -0.25, 0, { cast: false });
-  add(jib, G.rbox(0.1, 0.08, 0.1, 0.02), M.dark, 1.0, -0.52, 0);
-  crane.add(jib);
-  g.add(crane);
-  g.userData.anims = [{ obj: jib, type: 'spin', axis: 'y', speed: 0.5, swing: true }];
-  return g;
+// ---- instanced actors ----
+
+export function goblinGeometry() {
+  return mergeColored([
+    { geo: G.cap(0.11, 0.12, 4, 10), color: '#6f5a3c', pos: [0, 0.2, 0] },
+    { geo: G.sph(0.11, 12, 10), color: '#7fae4a', pos: [0, 0.4, 0.01] },
+    { geo: G.cone(0.04, 0.16, 5), color: '#7fae4a', pos: [0.12, 0.43, 0], rot: [0, 0, -1.3] },
+    { geo: G.cone(0.04, 0.16, 5), color: '#7fae4a', pos: [-0.12, 0.43, 0], rot: [0, 0, 1.3] },
+    { geo: G.sph(0.022, 6, 5), color: '#ffe066', pos: [0.04, 0.42, 0.095] },
+    { geo: G.sph(0.022, 6, 5), color: '#ffe066', pos: [-0.04, 0.42, 0.095] },
+    { geo: G.cyl(0.025, 0.04, 0.26, 6), color: '#5a3e28', pos: [0.13, 0.25, 0.06], rot: [0.9, 0, -0.2] },
+    { geo: G.cyl(0.035, 0.035, 0.1, 6), color: '#6f5a3c', pos: [0.05, 0.06, 0] },
+    { geo: G.cyl(0.035, 0.035, 0.1, 6), color: '#6f5a3c', pos: [-0.05, 0.06, 0] },
+  ]);
 }
 
-// Translucent copy for placement previews.
-export function ghostOf(model, valid) {
-  const mat = new THREE.MeshStandardMaterial({ color: valid ? '#a8f0dc' : '#ff9f8f', transparent: true, opacity: 0.55, emissive: valid ? '#3aa58a' : '#a83a2a', emissiveIntensity: 0.5, depthWrite: false });
-  model.traverse((o) => { if (o.isMesh) { o.material = mat; o.castShadow = false; } });
-  return model;
+export function wolfGeometry() {
+  return mergeColored([
+    { geo: G.cap(0.1, 0.32, 4, 10), color: '#7c7d84', pos: [0, 0.24, 0], rot: [Math.PI / 2, 0, 0] },
+    { geo: G.sph(0.1, 10, 8), color: '#8c8d94', pos: [0, 0.3, 0.27] },
+    { geo: G.cone(0.055, 0.14, 6), color: '#6a6b72', pos: [0, 0.28, 0.4], rot: [Math.PI / 2, 0, 0] },
+    { geo: G.cone(0.035, 0.09, 4), color: '#5b5c63', pos: [0.05, 0.4, 0.25] },
+    { geo: G.cone(0.035, 0.09, 4), color: '#5b5c63', pos: [-0.05, 0.4, 0.25] },
+    { geo: G.sph(0.018, 6, 5), color: '#ffcf4a', pos: [0.045, 0.33, 0.35] },
+    { geo: G.sph(0.018, 6, 5), color: '#ffcf4a', pos: [-0.045, 0.33, 0.35] },
+    { geo: G.cone(0.05, 0.22, 6), color: '#7c7d84', pos: [0, 0.28, -0.3], rot: [-2.0, 0, 0] },
+    ...[[0.06, 0.15], [-0.06, 0.15], [0.06, -0.14], [-0.06, -0.14]].map(([x, z]) => ({ geo: G.cyl(0.025, 0.02, 0.18, 5), color: '#6a6b72', pos: [x, 0.09, z] })),
+  ]);
 }
+
+export function arrowGeometry() {
+  return mergeColored([
+    { geo: G.cyl(0.012, 0.012, 0.5, 5), color: '#8a5d38', rot: [Math.PI / 2, 0, 0] },
+    { geo: G.cone(0.03, 0.08, 5), color: '#cfd2d6', pos: [0, 0, 0.28], rot: [Math.PI / 2, 0, 0] },
+    { geo: G.rbox(0.06, 0.005, 0.1, 0.002), color: '#f2efe6', pos: [0, 0, -0.22] },
+    { geo: G.rbox(0.005, 0.06, 0.1, 0.002), color: '#f2efe6', pos: [0, 0, -0.22] },
+  ]);
+}
+
+export function buildingFootprint(id) {
+  return { townhall: 1.7, archery: 0.95, farmstead: 1.35, lumber: 1.15, watchtower: 0.8 }[id] || 1.0;
+}
+
+export { BUILDINGS };

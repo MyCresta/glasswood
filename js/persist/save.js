@@ -22,13 +22,15 @@ export function serialize(state) {
 
 export function migrate(data) {
   if (!data || typeof data !== 'object') throw new Error('This is not an Asterwake save.');
-  if (!data.civ || !Array.isArray(data.colonies) || !data.colonists || !data.research) throw new Error('The save is missing required parts.');
+  if (data.colonies && !data.village) throw new Error('This save is from the earlier colony prototype, which works differently.');
+  if (!data.village || !data.buildings || typeof data.gold !== 'number') throw new Error('The save is missing required parts.');
   if ((data.version || 0) > SAVE_VERSION) throw new Error('This save comes from a newer version of Asterwake.');
   data.version = SAVE_VERSION;
   data.log ||= [];
   data.objectives ||= { claimed: [], flags: {} };
   data.settings ||= {};
-  data.ui ||= { colonyId: data.colonies[0]?.id };
+  data.ui ||= {};
+  data.lastResult ||= {};
   return data;
 }
 
@@ -84,11 +86,10 @@ export function parseImport(text) {
 
 export function summarizeSave(s) {
   return {
-    civ: s.civ.name,
-    era: s.era || 1,
-    colonies: s.colonies.length,
-    colonists: Object.keys(s.colonists).length,
-    techs: s.research.done.length,
+    name: s.village.name,
+    night: s.night,
+    best: s.best,
+    townhall: s.buildings.townhall?.level || 1,
     hours: s.time / 3600,
   };
 }

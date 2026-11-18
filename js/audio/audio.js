@@ -123,6 +123,45 @@ export class Audio {
     o.start(t); o.stop(t + len + 0.05);
   }
 
+  horn() {
+    const ctx = this.ctx;
+    const t = ctx.currentTime;
+    const f = ctx.createBiquadFilter();
+    f.type = 'lowpass'; f.frequency.value = 700;
+    f.connect(this.ui);
+    for (const [freq, start] of [[147, 0], [196, 0.55]]) {
+      const o = ctx.createOscillator();
+      const g = ctx.createGain();
+      o.type = 'sawtooth';
+      o.frequency.value = freq;
+      g.gain.setValueAtTime(0, t + start);
+      g.gain.linearRampToValueAtTime(0.14, t + start + 0.12);
+      g.gain.setValueAtTime(0.14, t + start + 0.45);
+      g.gain.exponentialRampToValueAtTime(0.0001, t + start + 1.1);
+      o.connect(g); g.connect(f);
+      o.start(t + start); o.stop(t + start + 1.2);
+    }
+  }
+
+  noise(len, freq, peak) {
+    const ctx = this.ctx;
+    if (!this.noiseBuf) {
+      this.noiseBuf = ctx.createBuffer(1, ctx.sampleRate * 0.3, ctx.sampleRate);
+      const d = this.noiseBuf.getChannelData(0);
+      for (let i = 0; i < d.length; i++) d[i] = Math.random() * 2 - 1;
+    }
+    const src = ctx.createBufferSource();
+    src.buffer = this.noiseBuf;
+    const f = ctx.createBiquadFilter();
+    f.type = 'bandpass'; f.frequency.value = freq; f.Q.value = 1.2;
+    const g = ctx.createGain();
+    const t = ctx.currentTime;
+    g.gain.setValueAtTime(peak, t);
+    g.gain.exponentialRampToValueAtTime(0.0001, t + len);
+    src.connect(f); f.connect(g); g.connect(this.ui);
+    src.start(t); src.stop(t + len + 0.02);
+  }
+
   // Short, identifiable interface sounds.
   play(kind) {
     if (!this.ctx || this.ctx.state !== 'running') return;
@@ -134,6 +173,13 @@ export class Audio {
       case 'research': [587, 740, 880, 1175].forEach((f, i) => this.tone(f, 0.7, u, 0.1, 'sine', i * 0.11)); break;
       case 'recruit': [440, 554, 659].forEach((f, i) => this.tone(f, 0.45, u, 0.12, 'triangle', i * 0.12)); break;
       case 'warn': this.tone(330, 0.35, u, 0.16, 'square'); this.tone(262, 0.45, u, 0.14, 'square', 0.18); break;
+      case 'upgrade': [392, 523, 659].forEach((f, i) => this.tone(f, 0.4, u, 0.12, 'triangle', i * 0.08)); break;
+      case 'dusk': this.horn(); break;
+      case 'dawn': [523, 659, 784, 1047].forEach((f, i) => this.tone(f, 0.9, u, 0.11, 'sine', i * 0.13)); break;
+      case 'fall': [392, 330, 262, 196].forEach((f, i) => this.tone(f, 0.7, u, 0.12, 'triangle', i * 0.16)); break;
+      case 'hit': this.noise(0.05, 2400, 0.05); break;
+      case 'death': this.tone(220 + Math.random() * 60, 0.12, u, 0.06, 'triangle'); this.noise(0.08, 900, 0.05); break;
+      case 'wall': this.noise(0.12, 300, 0.12); break;
       case 'cancel': this.tone(494, 0.12, u, 0.12, 'sine'); this.tone(392, 0.16, u, 0.1, 'sine', 0.07); break;
       default: break;
     }

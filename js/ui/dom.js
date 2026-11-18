@@ -1,5 +1,4 @@
 // Tiny DOM + formatting helpers.
-import { RESOURCE_INFO } from '../data/buildings.js';
 
 export function h(tag, props = {}, ...children) {
   const [name, ...cls] = tag.split('.');
@@ -58,19 +57,6 @@ export function dur(sec) {
 export function clockAt(secFromNow) {
   const d = new Date(Date.now() + secFromNow * 1000);
   return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-}
-
-export function resIcon(r) {
-  const i = RESOURCE_INFO[r];
-  return h('span.res-icon', { style: { color: i.color }, 'aria-hidden': 'true' }, i.icon);
-}
-
-export function costList(cost, colony, avail) {
-  return h('span.cost', {}, Object.entries(cost).map(([k, v]) => {
-    const short = avail && avail(k) + 1e-9 < v;
-    return h(`span.cost-item${short ? '.short' : ''}`, { title: `${exact(v)} ${RESOURCE_INFO[k].name}${short ? ' — not enough available' : ''}` },
-      resIcon(k), ` ${fmt(v, 0)} ${RESOURCE_INFO[k].name}`, short ? h('span.sr', {}, ' (missing)') : null);
-  }));
 }
 
 export function progressBar(frac, label) {

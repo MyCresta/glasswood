@@ -1,43 +1,37 @@
-// The colony diorama: scene, lighting, day/night, camera, buildings, colonists,
-// picking and placement previews. Purely presentational; never changes rules.
+// The village diorama and battlefield. Purely presentational: it reads the
+// simulation state every frame and never changes game rules.
 import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { makeMaterials, G, add, disposeGroup } from './kit.js';
-import { buildModel, buildScaffold, ghostOf } from './models.js';
-import { buildIsland, buildPads, buildDecor, buildSky, PLOT, PAD_TOP, plotCenter } from './world.js';
-import { PROFESSIONS } from '../data/people.js';
+import {
+  buildBuilding, buildWalls, buildPortal, goblinGeometry, wolfGeometry, arrowGeometry, buildingFootprint,
+} from './models.js';
+import { buildIsland, buildPaths, buildDecor, ISLAND_R } from './world.js';
+import { buildSky } from './sky.js';
+import { BUILDINGS, SPAWNS, WALL_R, FIELD_R, archeryStats } from '../data/village.js';
+import { spawnPos, defaultField, routeFrom } from '../sim/map.js';
+import { activeSpawns } from '../sim/battle.js';
 
-const DAY_LENGTH = 420; // seconds of real time for a full local day
-const SKIN = ['#f3d2b5', '#e2b48c', '#c98e62', '#a46a43', '#7a4b2c', '#5a3622'];
-const HAIR = ['#2b211c', '#5a3a22', '#a8743c', '#e0c27a', '#c4552f', '#d9d4cc', '#38404f'];
+const MAX_ENEMIES = 400;
+const MAX_SHOTS = 200;
+const MAX_PARTICLES = 500;
+const MAX_DOTS = 700;
+const ENEMY_SCALE = 1.45;
+const ENEMY_H = { goblin: 0.62 * ENEMY_SCALE, wolf: 0.55 * ENEMY_SCALE };
+const SKIN = ['#f3d2b5', '#e2b48c', '#c98e62', '#a46a43', '#7a4b2c'];
+const SHIRT = ['#5f7fb0', '#b0645a', '#6f9a5c', '#c49a4a', '#8a6fb0', '#4f8f8f'];
 
-function badgeTexture(symbol, bg) {
-  const c = document.createElement('canvas');
-  c.width = c.height = 128;
-  const x = c.getContext('2d');
-  x.fillStyle = 'rgba(30,26,24,0.85)';
-  x.beginPath(); x.arc(64, 64, 54, 0, Math.PI * 2); x.fill();
-  x.lineWidth = 8; x.strokeStyle = bg; x.stroke();
-  x.fillStyle = bg;
-  x.font = 'bold 64px system-ui, sans-serif';
-  x.textAlign = 'center'; x.textBaseline = 'middle';
-  x.fillText(symbol, 64, 68);
-  const t = new THREE.CanvasTexture(c);
-  t.colorSpace = THREE.SRGBColorSpace;
-  return t;
-}
-
-function softDot() {
+function dotTexture() {
   const c = document.createElement('canvas');
   c.width = c.height = 64;
   const x = c.getContext('2d');
   const g = x.createRadialGradient(32, 32, 0, 32, 32, 32);
   g.addColorStop(0, 'rgba(255,255,255,1)');
-  g.addColorStop(0.4, 'rgba(255,255,255,0.5)');
+  g.addColorStop(0.45, 'rgba(255,255,255,0.6)');
   g.addColorStop(1, 'rgba(255,255,255,0)');
-  x.fillStyle = g; x.fillRect(0, 0, 64, 64);
-  const t = new THREE.CanvasTexture(c);
-  return t;
+  x.fillStyle = g;
+  x.fillRect(0, 0, 64, 64);
+  return new THREE.CanvasTexture(c);
 }
 
 export class Diorama {
@@ -55,23 +49,20 @@ export class Diorama {
     this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 
     this.scene = new THREE.Scene();
-    this.scene.fog = new THREE.Fog('#cfd8e0', 45, 140);
-    this.camera = new THREE.PerspectiveCamera(38, 1, 0.1, 900);
+    this.scene.fog = new THREE.Fog('#cfd8e0', 60, 170);
+    this.camera = new THREE.PerspectiveCamera(36, 1, 0.1, 900);
 
-    this.hemi = new THREE.HemisphereLight('#dfefff', '#6b5a48', 0.9);
-    this.scene.add(this.hemi);
+    this.hemi = new THREE.HemisphereLight('#e4efff', '#6b5a48', 0.9);
     this.key = new THREE.DirectionalLight('#fff1dc', 2.4);
     this.key.castShadow = true;
     this.key.shadow.mapSize.set(2048, 2048);
     this.key.shadow.bias = -0.0004;
     this.key.shadow.normalBias = 0.03;
-    this.key.shadow.radius = 3;
-    this.scene.add(this.key, this.key.target);
-    this.fill = new THREE.DirectionalLight('#9fb8ff', 0.25);
-    this.fill.position.set(-20, 10, -15);
-    this.scene.add(this.fill);
+    const R = ISLAND_R + 1;
+    Object.assign(this.key.shadow.camera, { left: -R, right: R, top: R, bottom: -R, near: 1, far: 140 });
+    this.scene.add(this.hemi, this.key, this.key.target);
 
-    this.M = makeMaterials(handlers.accent || '#7fd6c8');
+    this.M = makeMaterials(handlers.accent || '#f0a86b');
     this.root = new THREE.Group();
     this.scene.add(this.root);
     this.sky = buildSky('temperate');
@@ -80,47 +71,39 @@ export class Diorama {
     this.controls = new OrbitControls(this.camera, canvas);
     Object.assign(this.controls, {
       enableDamping: true, dampingFactor: 0.09, screenSpacePanning: false,
-      minDistance: 7, maxDistance: 44, minPolarAngle: 0.35, maxPolarAngle: 1.2,
+      minDistance: 8, maxDistance: 72, minPolarAngle: 0.25, maxPolarAngle: 1.2,
       zoomSpeed: 0.9, rotateSpeed: 0.55, panSpeed: 0.9,
     });
     this.controls.mouseButtons = { LEFT: THREE.MOUSE.PAN, MIDDLE: THREE.MOUSE.DOLLY, RIGHT: THREE.MOUSE.ROTATE };
     this.controls.touches = { ONE: THREE.TOUCH.PAN, TWO: THREE.TOUCH.DOLLY_ROTATE };
     this.controls.addEventListener('change', () => this.clampTarget());
+    this.home = { target: new THREE.Vector3(0, -0.5, 1.2), dist: 35, polar: 0.9, az: 0.18 };
 
-    this.badges = {
-      unpowered: new THREE.SpriteMaterial({ map: badgeTexture('ϟ', '#f2d65c'), depthTest: false }),
-      'storage full': new THREE.SpriteMaterial({ map: badgeTexture('▤', '#e8c6a0'), depthTest: false }),
-      off: new THREE.SpriteMaterial({ map: badgeTexture('II', '#c8d3d8'), depthTest: false }),
-      short: new THREE.SpriteMaterial({ map: badgeTexture('!', '#e6a640'), depthTest: false }),
-    };
-    this.dot = softDot();
-
-    this.buildings = new Map(); // id → { group, model, key, hit, scaffold, badge }
-    this.people = new Map();
+    this.dot = dotTexture();
+    this.buildings = new Map();
+    this.portals = new Map();
     this.hitboxes = [];
+    this.people = [];
     this.selected = null;
     this.hovered = null;
-    this.placement = null;
-    this.clock = new THREE.Clock();
+    this.night = 0;
     this.t = 0;
-    this.dayT = DAY_LENGTH * 0.18;
-    this.focusAnim = null;
+    this.clock = new THREE.Clock();
+    this.seenFx = 0;
+    this.hitTimes = new Map();
+    this.lastShotPos = new Map();
 
-    this.selRing = new THREE.Mesh(new THREE.RingGeometry(1.2, 1.34, 48), new THREE.MeshBasicMaterial({ color: '#ffffff', transparent: true, opacity: 0.9, depthWrite: false }));
-    this.selRing.rotation.x = -Math.PI / 2;
-    this.selRing.visible = false;
-    this.hoverRing = new THREE.Mesh(new THREE.RingGeometry(1.22, 1.3, 48), new THREE.MeshBasicMaterial({ color: '#ffffff', transparent: true, opacity: 0.35, depthWrite: false }));
-    this.hoverRing.rotation.x = -Math.PI / 2;
-    this.hoverRing.visible = false;
-    this.scene.add(this.selRing, this.hoverRing);
-
-    this.initParticles();
+    this.buildStatic();
+    this.buildActors();
     this.bindPointer();
     this.resize();
     new ResizeObserver(() => this.resize()).observe(canvas.parentElement);
+    this.resetCamera(true);
   }
 
-  setAccent(color) { this.M.accent.color.set(color); this.selRing.material.color.set('#ffffff'); }
+  // ---------- settings ----------
+
+  setAccent(color) { this.M.accent.color.set(color); this.rangeMat.color.set(color); }
 
   setQuality(q) {
     this.quality = q;
@@ -128,16 +111,16 @@ export class Diorama {
     this.renderer.setPixelRatio(q === 'low' ? Math.min(dpr, 1) : Math.min(dpr, 2));
     this.key.castShadow = q !== 'low';
     this.renderer.shadowMap.enabled = q !== 'low';
-    this.motes.visible = q !== 'low' && !this.reducedMotion;
     this.sky.clouds.forEach((c) => (c.visible = q !== 'low'));
     this.resize();
-    if (this.colony) this.rebuildDecor();
+    if (this.decor) { this.root.remove(this.decor); disposeGroup(this.decor); }
+    this.decor = buildDecor(this.island, q, 11);
+    this.root.add(this.decor);
   }
 
   setMotion(reduced, flashing) {
     this.reducedMotion = reduced;
     this.reducedFlashing = flashing;
-    this.motes.visible = this.quality !== 'low' && !reduced;
   }
 
   resize() {
@@ -145,386 +128,310 @@ export class Diorama {
     const w = el.clientWidth || 1;
     const h = el.clientHeight || 1;
     this.renderer.setSize(w, h, false);
-    this.camera.aspect = w / h;
+    const aspect = w / h;
+    this.camera.aspect = aspect;
+    // portrait screens get a wider lens and a longer default distance
+    this.camera.fov = aspect < 1 ? 50 : 36;
     this.camera.updateProjectionMatrix();
+    if (this.home) {
+      this.home.dist = aspect < 1 ? 35 * Math.min(2, 1 / aspect) * 0.72 : 35;
+      this.home.target.z = aspect < 1 ? 4.5 : 1.2;
+    }
   }
 
-  // ---------- colony scene ----------
+  // ---------- scene construction ----------
 
-  setColony(colony) {
-    this.clearColony();
-    this.colony = { id: colony.id, biome: colony.biome, grid: colony.grid };
-    this.island = buildIsland(colony.biome, colony.grid, 7);
+  buildStatic() {
+    this.island = buildIsland(7);
     this.root.add(this.island.mesh);
-    this.pads = buildPads(colony.biome, colony.grid);
-    this.root.add(this.pads);
-    this.rebuildDecor();
-    const c = this.island.center;
-    this.home = { target: new THREE.Vector3(c.x, -0.6, c.z), dist: 30, polar: 1.0, az: 0.55 };
-    this.resetCamera(true);
-    // shadow camera fits the island
-    const R = this.island.R + 2;
-    Object.assign(this.key.shadow.camera, { left: -R, right: R, top: R, bottom: -R, near: 1, far: 120 });
-    this.key.shadow.camera.updateProjectionMatrix();
-    this.key.target.position.copy(c);
-  }
-
-  rebuildDecor() {
-    if (this.decor) { this.root.remove(this.decor); disposeGroup(this.decor); }
-    this.decor = buildDecor(this.colony.biome, this.island, this.quality, 11);
+    this.root.add(buildPaths());
+    this.decor = buildDecor(this.island, this.quality, 11);
     this.root.add(this.decor);
+
+    // range ring and route dots
+    this.rangeMat = new THREE.MeshBasicMaterial({ color: this.M.accent.color, transparent: true, opacity: 0.0, depthWrite: false });
+    this.rangeRing = new THREE.Mesh(new THREE.RingGeometry(0.97, 1.0, 160), this.rangeMat);
+    this.rangeRing.rotation.x = -Math.PI / 2;
+    this.rangeRing.position.y = 0.04;
+    this.rangeRing.renderOrder = 2;
+    this.root.add(this.rangeRing);
+
+    const dotGeo = new THREE.CircleGeometry(0.13, 12);
+    dotGeo.rotateX(-Math.PI / 2);
+    this.dotMat = new THREE.MeshBasicMaterial({ color: '#ff7f5a', transparent: true, opacity: 0.85, depthWrite: false });
+    this.dots = new THREE.InstancedMesh(dotGeo, this.dotMat, MAX_DOTS);
+    this.dots.count = 0;
+    this.dots.renderOrder = 3;
+    this.dots.frustumCulled = false;
+    this.root.add(this.dots);
+    this.routes = [];
+
+    // selection
+    this.selMat = new THREE.MeshBasicMaterial({ color: '#ffffff', transparent: true, opacity: 0.85, depthWrite: false });
+    this.selRing = new THREE.Mesh(new THREE.RingGeometry(0.92, 1, 64), this.selMat);
+    this.selRing.rotation.x = -Math.PI / 2;
+    this.selRing.visible = false;
+    this.selRing.renderOrder = 4;
+    this.hoverRing = new THREE.Mesh(new THREE.RingGeometry(0.94, 1, 64), new THREE.MeshBasicMaterial({ color: '#ffffff', transparent: true, opacity: 0.35, depthWrite: false }));
+    this.hoverRing.rotation.x = -Math.PI / 2;
+    this.hoverRing.visible = false;
+    this.root.add(this.selRing, this.hoverRing);
+
+    // wall hitbox (a torus around the ring)
+    const wallHit = new THREE.Mesh(new THREE.TorusGeometry(WALL_R, 0.55, 6, 64), new THREE.MeshBasicMaterial({ visible: false }));
+    wallHit.rotation.x = Math.PI / 2;
+    wallHit.position.y = 0.5;
+    wallHit.userData.pick = 'walls';
+    this.root.add(wallHit);
+    this.hitboxes.push(wallHit);
+
+    // spawn portals hitboxes are created with the portals in sync()
+    for (const s of SPAWNS) {
+      const [x, z] = spawnPos(s);
+      const hit = new THREE.Mesh(new THREE.BoxGeometry(1.8, 2.2, 1.4), new THREE.MeshBasicMaterial({ visible: false }));
+      hit.position.set(x, 1.1, z);
+      hit.rotation.y = Math.atan2(-x, -z);
+      hit.userData.pick = `spawn:${s.id}`;
+      this.root.add(hit);
+      this.hitboxes.push(hit);
+    }
+
+    this.buildVillagers();
   }
 
-  clearColony() {
-    for (const id of [...this.buildings.keys()]) this.removeBuilding(id);
-    for (const id of [...this.people.keys()]) this.removePerson(id);
-    for (const o of [this.island?.mesh, this.pads, this.decor]) if (o) { this.root.remove(o); o.geometry?.dispose?.(); }
-    this.island = null;
+  buildActors() {
+    const mat = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.75 });
+    this.enemyMat = mat;
+    this.enemyMesh = {
+      goblin: new THREE.InstancedMesh(goblinGeometry(), mat, MAX_ENEMIES),
+      wolf: new THREE.InstancedMesh(wolfGeometry(), mat, MAX_ENEMIES),
+    };
+    for (const m of Object.values(this.enemyMesh)) {
+      m.count = 0;
+      m.castShadow = true;
+      m.frustumCulled = false;
+      m.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
+      m.setColorAt(0, new THREE.Color('#ffffff'));
+      this.root.add(m);
+    }
+    const quad = new THREE.PlaneGeometry(1, 1);
+    this.barBg = new THREE.InstancedMesh(quad, new THREE.MeshBasicMaterial({ color: '#2a1d19', depthTest: false, transparent: true, opacity: 0.85 }), MAX_ENEMIES);
+    this.barFg = new THREE.InstancedMesh(quad, new THREE.MeshBasicMaterial({ color: '#ffffff', depthTest: false }), MAX_ENEMIES);
+    for (const b of [this.barBg, this.barFg]) { b.count = 0; b.frustumCulled = false; b.renderOrder = 10; this.root.add(b); }
+    this.barFg.setColorAt(0, new THREE.Color('#ffffff'));
+    this.arrows = new THREE.InstancedMesh(arrowGeometry(), mat, MAX_SHOTS);
+    this.arrows.count = 0;
+    this.arrows.frustumCulled = false;
+    this.root.add(this.arrows);
+
+    // particles
+    const pg = new THREE.BufferGeometry();
+    this.pPos = new Float32Array(MAX_PARTICLES * 3);
+    this.pCol = new Float32Array(MAX_PARTICLES * 3);
+    pg.setAttribute('position', new THREE.BufferAttribute(this.pPos, 3));
+    pg.setAttribute('color', new THREE.BufferAttribute(this.pCol, 3));
+    this.particles = new THREE.Points(pg, new THREE.PointsMaterial({ size: 0.16, map: this.dot, vertexColors: true, transparent: true, depthWrite: false }));
+    this.particles.frustumCulled = false;
+    this.root.add(this.particles);
+    this.pool = Array.from({ length: MAX_PARTICLES }, () => ({ life: 0, max: 1, x: 0, y: -99, z: 0, vx: 0, vy: 0, vz: 0, r: 1, g: 1, b: 1, grav: 0, home: false }));
   }
 
-  removeBuilding(id) {
-    const e = this.buildings.get(id);
-    if (!e) return;
-    this.root.remove(e.group);
-    disposeGroup(e.group);
-    this.hitboxes = this.hitboxes.filter((h) => h !== e.hit);
-    this.buildings.delete(id);
+  buildVillagers() {
+    const spots = Object.entries(BUILDINGS).filter(([id]) => id !== 'walls' && id !== 'watchtower').map(([, b]) => [b.pos[0] * 0.78, b.pos[1] * 0.78]);
+    this.spots = spots;
+    for (let i = 0; i < 7; i++) {
+      const g = new THREE.Group();
+      const shirt = new THREE.MeshStandardMaterial({ color: SHIRT[i % SHIRT.length], roughness: 0.8 });
+      const skin = new THREE.MeshStandardMaterial({ color: SKIN[i % SKIN.length], roughness: 0.8 });
+      add(g, G.cap(0.07, 0.12, 4, 8), shirt, 0, 0.14, 0);
+      add(g, G.sph(0.065, 10, 8), skin, 0, 0.3, 0);
+      g.scale.setScalar(1.3);
+      const s = spots[i % spots.length];
+      g.position.set(s[0], 0.02, s[1]);
+      this.root.add(g);
+      this.people.push({ g, path: [], wait: Math.random() * 4, phase: Math.random() * 10 });
+    }
   }
 
-  // Called a few times a second with fresh simulation data.
-  sync(colony, snap, opts = {}) {
-    if (!this.colony || this.colony.id !== colony.id || this.colony.grid !== colony.grid) this.setColony(colony);
-    const seen = new Set();
-    const active = colony.queue[0];
-    for (const b of colony.buildings) {
-      seen.add(b.id);
-      const constructing = b.level < 1;
-      const key = `${b.type}:${constructing ? 1 : b.level}:${constructing ? 'c' : ''}:${b.upgrading ? 'u' : ''}`;
-      let e = this.buildings.get(b.id);
-      if (!e || e.key !== key) {
-        if (e) this.removeBuilding(b.id);
-        e = this.makeBuildingEntry(b, constructing, key);
-      }
-      const p = plotCenter(b.gx, b.gz);
-      e.group.position.set(p.x, PAD_TOP, p.z);
-      e.model.rotation.y = (b.rot || 0) * (Math.PI / 2);
-      if (constructing) {
-        const item = colony.queue.find((q) => q.bid === b.id);
-        const prog = item ? Math.min(1, item.progress / item.duration) : 0;
-        e.model.scale.set(0.96, 0.06 + 0.94 * prog, 0.96);
-        e.scaffold.userData.working = active?.bid === b.id;
-      } else if (e.scaffold) {
-        e.scaffold.userData.working = active?.bid === b.id;
-      }
-      const info = snap.info[b.id];
-      e.running = !!info && !['constructing', 'off', 'unpowered'].includes(info.status) && (colony.runtime[b.id]?.factor ?? 1) > 0;
-      e.status = info?.status;
-      const rt = colony.runtime[b.id];
-      let badge = null;
-      if (info?.status === 'unpowered') badge = 'unpowered';
-      else if (info?.status === 'off') badge = 'off';
-      else if (rt && rt.factor < 0.999 && rt.reason === 'storage full' && info?.status !== 'constructing') badge = 'storage full';
-      else if (rt && rt.factor < 0.999 && rt.reason?.startsWith('short')) badge = 'short';
-      if (badge !== e.badgeKind) {
-        if (e.badge) { e.group.remove(e.badge); e.badge = null; }
-        if (badge) {
-          e.badge = new THREE.Sprite(this.badges[badge]);
-          e.badge.scale.setScalar(0.55);
-          e.badge.position.set(0, 2.3, 0);
-          e.badge.renderOrder = 5;
-          e.group.add(e.badge);
+  // ---------- sync with state (a few times a second) ----------
+
+  sync(state) {
+    // buildings
+    for (const [id, def] of Object.entries(BUILDINGS)) {
+      const lv = state.buildings[id]?.level ?? 0;
+      if (id === 'walls') {
+        if (this.wallsLevel !== lv) {
+          if (this.walls) { this.root.remove(this.walls); disposeGroup(this.walls); }
+          this.walls = buildWalls(this.M, lv);
+          this.root.add(this.walls);
+          this.wallsLevel = lv;
         }
-        e.badgeKind = badge;
-      }
-    }
-    for (const id of [...this.buildings.keys()]) if (!seen.has(id)) this.removeBuilding(id);
-    if (this.selected && !this.buildings.has(this.selected)) this.select(null);
-    this.updatePads(colony);
-    this.syncPeople(colony, snap, opts.state);
-    if (this.selected) {
-      const e = this.buildings.get(this.selected);
-      this.selRing.position.set(e.group.position.x, PAD_TOP + 0.02, e.group.position.z);
-    }
-  }
-
-  makeBuildingEntry(b, constructing, key) {
-    const group = new THREE.Group();
-    const model = buildModel(b.type, constructing ? 1 : b.level, this.M);
-    group.add(model);
-    let scaffold = null;
-    if (constructing || b.upgrading) {
-      scaffold = buildScaffold(this.M, b.type === 'hq' ? 1.9 : 1.6);
-      group.add(scaffold);
-    }
-    const hit = new THREE.Mesh(new THREE.BoxGeometry(2.2, 2.4, 2.2), new THREE.MeshBasicMaterial({ visible: false }));
-    hit.position.y = 1.2;
-    hit.userData.bid = b.id;
-    group.add(hit);
-    this.hitboxes.push(hit);
-    this.root.add(group);
-    for (const a of model.userData.anims) {
-      if (a.world) a.obj.rotation.order = 'YXZ';
-      a.base = { y: a.obj.position.y, rot: a.obj.rotation.clone(), scale: a.obj.scale.clone() };
-    }
-    const e = { group, model, key, hit, scaffold, badge: null, badgeKind: null, running: true, smokeT: 0 };
-    this.buildings.set(b.id, e);
-    return e;
-  }
-
-  updatePads(colony) {
-    if (!this.pads) return;
-    const occupied = new Set(colony.buildings.map((b) => `${b.gx},${b.gz}`));
-    const base = new THREE.Color('#b9b49c');
-    const free = new THREE.Color('#a9e3d4');
-    const target = new THREE.Color('#ffffff');
-    this.pads.userData.keys.forEach(([gx, gz], i) => {
-      let c = base;
-      if (this.placement) {
-        const isFree = !occupied.has(`${gx},${gz}`) || (this.placement.moving && this.placement.moving.gx === gx && this.placement.moving.gz === gz);
-        c = isFree ? free : base;
-        if (this.placement.plot && this.placement.plot.gx === gx && this.placement.plot.gz === gz) c = target;
-      }
-      this.pads.setColorAt(i, c);
-    });
-    this.pads.instanceColor.needsUpdate = true;
-  }
-
-  // ---------- colonists ----------
-
-  personMesh(c) {
-    const g = new THREE.Group();
-    const body = new THREE.MeshStandardMaterial({ color: PROFESSIONS[c.profession]?.color || '#ccc', roughness: 0.7 });
-    const skin = new THREE.MeshStandardMaterial({ color: SKIN[c.look?.skin ?? 0], roughness: 0.8 });
-    const hair = new THREE.MeshStandardMaterial({ color: HAIR[c.look?.hair ?? 0], roughness: 0.8 });
-    add(g, G.cap(0.085, 0.14, 4, 10), body, 0, 0.17, 0);
-    add(g, G.sph(0.075, 12, 10), skin, 0, 0.35, 0);
-    add(g, G.sph(0.078, 12, 8, Math.PI * 2, 0, Math.PI / 2), hair, 0, 0.36, -0.005);
-    add(g, G.rbox(0.09, 0.1, 0.05, 0.02), this.M.wallCool, 0, 0.19, -0.08);
-    g.scale.setScalar(1.25);
-    g.userData.mats = [body, skin, hair];
-    g.userData.prof = c.profession;
-    return g;
-  }
-
-  removePerson(id) {
-    const p = this.people.get(id);
-    if (!p) return;
-    this.root.remove(p.mesh);
-    p.mesh.userData.mats.forEach((m) => m.dispose());
-    this.people.delete(id);
-  }
-
-  syncPeople(colony, snap, state) {
-    const seen = new Set();
-    const hq = colony.buildings.find((b) => b.type === 'hq');
-    const homes = colony.buildings.filter((b) => b.type === 'habitat' && b.level >= 1);
-    const crowd = this.quality === 'low' ? 8 : 20;
-    let n = 0;
-    for (const c of snap.people) {
-      if (n++ >= crowd) break;
-      seen.add(c.id);
-      let p = this.people.get(c.id);
-      if (!p || p.mesh.userData.prof !== c.profession) {
-        if (p) this.removePerson(c.id);
-        const mesh = this.personMesh(c);
-        const start = plotCenter(hq.gx, hq.gz);
-        mesh.position.set(start.x + (Math.random() - 0.5), PAD_TOP, start.z + 1.1);
-        this.root.add(mesh);
-        p = { mesh, path: [], wait: Math.random() * 3, phase: Math.random() * 10, mode: 'idle' };
-        this.people.set(c.id, p);
-      }
-      let work = hq;
-      if (c.assign?.kind === 'building') work = colony.buildings.find((b) => b.id === c.assign.bid) || hq;
-      else if (c.assign?.kind === 'support') work = colony.buildings.find((b) => b.id === colony.queue[0]?.bid) || hq;
-      const home = homes.length ? homes[Math.abs(hashStr(c.id)) % homes.length] : hq;
-      p.work = work; p.home = home; p.hq = hq; p.relief = !c.assign;
-      p.followed = this.followId === c.id;
-    }
-    for (const id of [...this.people.keys()]) if (!seen.has(id)) this.removePerson(id);
-  }
-
-  door(b) {
-    const p = plotCenter(b.gx, b.gz);
-    return new THREE.Vector3(p.x + 0.1, PAD_TOP, p.z + 1.08);
-  }
-
-  routeTo(p, b) {
-    const from = p.mesh.position.clone();
-    const to = this.door(b);
-    const jitter = (Math.random() - 0.5) * 0.4;
-    to.x += jitter;
-    const laneZa = Math.round((from.z - 1.3) / PLOT) * PLOT + PLOT / 2;
-    const laneX = to.x + PLOT / 2 - 0.15;
-    p.path = [
-      new THREE.Vector3(from.x, PAD_TOP, laneZa),
-      new THREE.Vector3(laneX, PAD_TOP, laneZa),
-      new THREE.Vector3(laneX, PAD_TOP, to.z),
-      to,
-    ];
-  }
-
-  stepPeople(dt) {
-    for (const p of this.people.values()) {
-      const m = p.mesh;
-      if (p.path.length) {
-        const target = p.path[0];
-        const d = target.clone().sub(m.position);
-        d.y = 0;
-        const len = d.length();
-        const step = 0.9 * dt;
-        if (len <= step) { m.position.x = target.x; m.position.z = target.z; p.path.shift(); }
-        else {
-          d.multiplyScalar(step / len);
-          m.position.add(d);
-          m.rotation.y = Math.atan2(d.x, d.z);
-        }
-        p.phase += dt * 10;
-        m.position.y = PAD_TOP + Math.abs(Math.sin(p.phase)) * 0.035;
-        if (!p.path.length) { p.wait = p.mode === 'work' ? 8 + Math.random() * 10 : 3 + Math.random() * 5; m.rotation.y = Math.PI; }
         continue;
       }
-      p.wait -= dt;
-      p.phase += dt * 3;
-      m.position.y = PAD_TOP + (p.mode === 'work' ? Math.abs(Math.sin(p.phase * 2)) * 0.02 : 0);
-      if (p.mode === 'work') m.rotation.y = Math.PI + Math.sin(p.phase) * 0.6;
-      if (p.wait > 0 || !p.work) continue;
-      // choose the next errand
-      if (p.mode !== 'work') { p.mode = 'work'; this.routeTo(p, p.relief ? p.hq : p.work); }
-      else { p.mode = 'rest'; this.routeTo(p, Math.random() < 0.6 ? p.home : p.hq); }
-    }
-  }
-
-  // ---------- particles ----------
-
-  initParticles() {
-    const N = 140;
-    const pos = new Float32Array(N * 3);
-    for (let i = 0; i < N; i++) { pos[i * 3] = (Math.random() - 0.5) * 22; pos[i * 3 + 1] = Math.random() * 4 + 0.3; pos[i * 3 + 2] = (Math.random() - 0.5) * 22; }
-    const g = new THREE.BufferGeometry();
-    g.setAttribute('position', new THREE.BufferAttribute(pos, 3));
-    this.motesBase = pos.slice();
-    this.moteMat = new THREE.PointsMaterial({ map: this.dot, color: '#fff3c4', size: 0.12, transparent: true, opacity: 0.5, depthWrite: false, blending: THREE.AdditiveBlending });
-    this.motes = new THREE.Points(g, this.moteMat);
-    this.scene.add(this.motes);
-    this.smokeMat = new THREE.SpriteMaterial({ map: this.dot, color: '#e9e4dc', transparent: true, opacity: 0.4, depthWrite: false });
-    this.smoke = [];
-  }
-
-  stepParticles(dt, night) {
-    if (this.motes.visible) {
-      const a = this.motes.geometry.attributes.position;
-      const c = this.island?.center || new THREE.Vector3();
-      for (let i = 0; i < a.count; i++) {
-        const bx = this.motesBase[i * 3], by = this.motesBase[i * 3 + 1], bz = this.motesBase[i * 3 + 2];
-        a.setXYZ(i, c.x + bx + Math.sin(this.t * 0.3 + i) * 0.4, by + Math.sin(this.t * 0.5 + i * 1.7) * 0.25, c.z + bz + Math.cos(this.t * 0.25 + i * 0.7) * 0.4);
+      const key = `${id}:${lv}`;
+      let e = this.buildings.get(id);
+      if (!e || e.key !== key) {
+        if (e) { this.root.remove(e.group); disposeGroup(e.group); this.hitboxes = this.hitboxes.filter((x) => x !== e.hit); }
+        const group = new THREE.Group();
+        const model = buildBuilding(id, lv, this.M);
+        group.add(model);
+        const [x, z] = def.pos;
+        group.position.set(x, 0, z);
+        if (id !== 'townhall' && id !== 'archery' && id !== 'watchtower') model.rotation.y = Math.atan2(-x, -z);
+        const fp = buildingFootprint(id);
+        const hit = new THREE.Mesh(new THREE.BoxGeometry(fp * 2, 2.4, fp * 2), new THREE.MeshBasicMaterial({ visible: false }));
+        hit.position.y = 1.2;
+        hit.userData.pick = id;
+        group.add(hit);
+        this.hitboxes.push(hit);
+        this.root.add(group);
+        for (const a of model.userData.anims) a.base = { y: a.obj.position.y, rot: a.obj.rotation.clone() };
+        e = { key, group, model, hit };
+        this.buildings.set(id, e);
       }
-      a.needsUpdate = true;
-      this.moteMat.color.set(night > 0.5 ? '#c9ff9a' : '#fff3c4');
-      this.moteMat.opacity = 0.25 + night * 0.6;
-      this.moteMat.size = 0.08 + night * 0.08;
     }
-    // smoke from running refineries
-    if (!this.reducedMotion) {
-      for (const e of this.buildings.values()) {
-        const sp = e.model.userData.smoke;
-        if (!sp || !e.running) continue;
-        e.smokeT -= dt;
-        if (e.smokeT <= 0 && this.smoke.length < 40) {
-          e.smokeT = 0.35;
-          const s = new THREE.Sprite(this.smokeMat.clone());
-          const wp = sp.clone().applyMatrix4(e.model.matrixWorld);
-          s.position.copy(wp);
-          s.scale.setScalar(0.15);
-          s.userData.life = 0;
-          this.scene.add(s);
-          this.smoke.push(s);
+    // portals: open if active tonight (or during the current night)
+    const n = state.battle ? state.battle.n : state.night;
+    const active = new Set(activeSpawns(n).map((s) => s.id));
+    for (const s of SPAWNS) {
+      const open = active.has(s.id);
+      let p = this.portals.get(s.id);
+      if (!p || p.open !== open) {
+        if (p) { this.root.remove(p.g); disposeGroup(p.g); }
+        const g = buildPortal(this.M, open, s.id === 'moss' || s.id === 'bog');
+        if (open) {
+          const glow = new THREE.Sprite(new THREE.SpriteMaterial({ map: this.dot, color: '#9d6bff', transparent: true, opacity: 0.55, depthWrite: false, blending: THREE.AdditiveBlending }));
+          glow.position.y = 1.0;
+          glow.scale.set(2.2, 2.6, 1);
+          g.add(glow);
+          g.userData.glow = glow;
         }
+        const [x, z] = spawnPos(s);
+        g.position.set(x, this.island.heightAt(x, z) * 0.3, z);
+        g.rotation.y = Math.atan2(-x, -z);
+        this.root.add(g);
+        p = { g, open };
+        this.portals.set(s.id, p);
       }
     }
-    for (let i = this.smoke.length - 1; i >= 0; i--) {
-      const s = this.smoke[i];
-      s.userData.life += dt;
-      const l = s.userData.life / 3.2;
-      s.position.y += dt * 0.45;
-      s.position.x += dt * 0.12;
-      s.scale.setScalar(0.15 + l * 0.6);
-      s.material.opacity = 0.35 * (1 - l);
-      if (l >= 1) { this.scene.remove(s); s.material.dispose(); this.smoke.splice(i, 1); }
+    // routes for tonight's spawn points
+    const routeKey = [...active].join(',');
+    if (this.routeKey !== routeKey) {
+      this.routeKey = routeKey;
+      const f = defaultField();
+      this.routes = [...active].map((id) => {
+        const [x, z] = spawnPos(SPAWNS.find((s) => s.id === id));
+        return { id, ...routeFrom(f, x, z) };
+      });
     }
+    this.state = state;
+    this.archeryRange = archeryStats(state.buildings.archery.level).range;
+    this.rangeRing.scale.setScalar(this.archeryRange);
+    if (this.selected) this.placeSelection(this.selected, this.selRing);
   }
 
-  // ---------- day / night ----------
+  // ---------- picking ----------
 
-  stepSky(dt) {
-    this.dayT += dt;
-    const phase = (this.dayT % DAY_LENGTH) / DAY_LENGTH;
-    const ang = phase * Math.PI * 2;
-    const elev = Math.sin(ang);
-    const day = THREE.MathUtils.smoothstep(elev, -0.12, 0.3);
-    const dusk = Math.max(0, 1 - Math.abs(elev) / 0.32) ;
-    const P = this.sky.palette;
-    const u = this.sky.uniforms;
-    const tmp = new THREE.Color();
-    ['top', 'horizon', 'bottom'].forEach((k, i) => {
-      tmp.copy(P.night[i]).lerp(P.day[i], day);
-      tmp.lerp(P.dusk[i], dusk * 0.65);
-      u[k].value.copy(tmp);
+  bindPointer() {
+    const el = this.canvas;
+    const ray = new THREE.Raycaster();
+    const ndc = new THREE.Vector2();
+    let down = null;
+    this.pickAt = (e) => {
+      const r = el.getBoundingClientRect();
+      ndc.set(((e.clientX - r.left) / r.width) * 2 - 1, -((e.clientY - r.top) / r.height) * 2 + 1);
+      ray.setFromCamera(ndc, this.camera);
+      const hit = ray.intersectObjects(this.hitboxes, false)[0];
+      return hit ? hit.object.userData.pick : null;
+    };
+    el.addEventListener('pointerdown', (e) => { down = { x: e.clientX, y: e.clientY, t: performance.now() }; });
+    el.addEventListener('pointerup', (e) => {
+      if (!down) return;
+      const moved = Math.hypot(e.clientX - down.x, e.clientY - down.y);
+      const quick = performance.now() - down.t < 600;
+      down = null;
+      if (moved > 7 || !quick || e.button === 2) return;
+      this.h.onSelect?.(this.pickAt(e));
     });
-    this.scene.fog.color.copy(u.horizon.value).lerp(u.bottom.value, 0.25);
-    const c = this.island?.center || new THREE.Vector3();
-    const sun = new THREE.Vector3(Math.cos(ang) * 30, Math.max(elev, 0.05) * 35, 18);
-    const moon = new THREE.Vector3(-Math.cos(ang) * 25, Math.max(-elev, 0.1) * 30, -14);
-    const useSun = elev > -0.05;
-    this.key.position.copy(c).add(useSun ? sun : moon);
-    this.key.intensity = useSun ? 0.4 + 2.2 * day : 0.45;
-    this.key.color.set(useSun ? '#fff1dc' : '#9fb4ff').lerp(new THREE.Color('#ffb27a'), useSun ? dusk * 0.6 : 0);
-    this.hemi.intensity = 0.35 + 0.6 * day;
-    this.hemi.color.set('#dfefff').lerp(new THREE.Color('#5d6aa8'), 1 - day);
-    const night = 1 - day;
-    this.M.window.emissiveIntensity = 0.15 + 1.7 * night;
-    this.M.growLight.emissiveIntensity = 0.45 + 1.5 * night;
-    this.sky.starMat.opacity = 0.18 + 0.75 * night;
-    this.sky.cloudMat.color.set('#ffffff').lerp(new THREE.Color('#8e8fb8'), night);
-    this.sky.cloudMat.color.lerp(new THREE.Color('#ffc59a'), dusk * 0.5);
-    this.sunDir = sun.clone().normalize();
-    this.night = night;
-    return night;
+    let last = 0;
+    el.addEventListener('pointermove', (e) => {
+      if (e.pointerType !== 'mouse' || down) return;
+      const now = performance.now();
+      if (now - last < 50) return;
+      last = now;
+      const id = this.pickAt(e);
+      if (id !== this.hovered) {
+        this.hovered = id;
+        el.style.cursor = id ? 'pointer' : '';
+      }
+      this.h.onHover?.(id, e);
+    });
+    el.addEventListener('pointerleave', () => { this.hovered = null; this.h.onHover?.(null); });
+    el.addEventListener('contextmenu', (e) => e.preventDefault());
+  }
+
+  placeSelection(id, ring) {
+    let x = 0, z = 0, r = 1;
+    if (id === 'walls') r = WALL_R + 0.35;
+    else if (id?.startsWith('spawn:')) { [x, z] = spawnPos(SPAWNS.find((s) => `spawn:${s.id}` === id)); r = 1.2; }
+    else if (BUILDINGS[id]) { [x, z] = BUILDINGS[id].pos; r = buildingFootprint(id) + 0.2; }
+    ring.position.set(x, 0.05, z);
+    ring.scale.setScalar(r);
+    ring.visible = true;
+  }
+
+  select(id) {
+    this.selected = id;
+    if (id) this.placeSelection(id, this.selRing);
+    else this.selRing.visible = false;
+  }
+
+  focus(id) {
+    let x = 0, z = 0, dist = 14;
+    if (id?.startsWith('spawn:')) { [x, z] = spawnPos(SPAWNS.find((s) => `spawn:${s.id}` === id)); dist = 16; }
+    else if (id === 'walls') dist = 28;
+    else if (BUILDINGS[id]) [x, z] = BUILDINGS[id].pos;
+    const off = this.camera.position.clone().sub(this.controls.target);
+    const sph = new THREE.Spherical().setFromVector3(off);
+    this.setView(new THREE.Vector3(x, 0.4, z), dist, Math.min(sph.phi, 1.0), sph.theta);
+  }
+
+  screenPos(x, y, z) {
+    const v = new THREE.Vector3(x, y, z).project(this.camera);
+    const r = this.canvas.getBoundingClientRect();
+    return { x: r.left + ((v.x + 1) / 2) * r.width, y: r.top + ((1 - v.y) / 2) * r.height, behind: v.z > 1 };
   }
 
   // ---------- camera ----------
 
   clampTarget() {
-    if (!this.island) return;
     const t = this.controls.target;
-    const c = this.island.center;
-    const lim = this.island.half + 2.5;
-    const nx = THREE.MathUtils.clamp(t.x, c.x - lim, c.x + lim);
-    const nz = THREE.MathUtils.clamp(t.z, c.z - lim, c.z + lim);
-    if (nx !== t.x || nz !== t.z) {
-      const dx = nx - t.x, dz = nz - t.z;
-      t.x = nx; t.z = nz;
+    const lim = FIELD_R - 2;
+    const d = Math.hypot(t.x, t.z);
+    if (d > lim) {
+      const k = lim / d;
+      const dx = t.x * k - t.x, dz = t.z * k - t.z;
+      t.x += dx; t.z += dz;
       this.camera.position.x += dx; this.camera.position.z += dz;
     }
   }
 
   setView(target, dist, polar, az, instant) {
     const end = { target: target.clone(), dist, polar, az };
-    if (instant || this.reducedMotion) { this.applyView(end); this.focusAnim = null; return; }
-    const off = this.camera.position.clone().sub(this.controls.target);
-    const sph = new THREE.Spherical().setFromVector3(off);
-    this.focusAnim = { t: 0, from: { target: this.controls.target.clone(), dist: sph.radius, polar: sph.phi, az: sph.theta }, to: end };
+    if (instant || this.reducedMotion) { this.applyView(end); this.anim = null; return; }
+    const sph = new THREE.Spherical().setFromVector3(this.camera.position.clone().sub(this.controls.target));
+    this.anim = { t: 0, from: { target: this.controls.target.clone(), dist: sph.radius, polar: sph.phi, az: sph.theta }, to: end };
   }
 
   applyView(v) {
     this.controls.target.copy(v.target);
-    const off = new THREE.Vector3().setFromSpherical(new THREE.Spherical(v.dist, v.polar, v.az));
-    this.camera.position.copy(v.target).add(off);
+    this.camera.position.copy(v.target).add(new THREE.Vector3().setFromSpherical(new THREE.Spherical(v.dist, v.polar, v.az)));
     this.controls.update();
   }
 
   resetCamera(instant = false) {
     const h = this.home;
-    if (h) this.setView(h.target, h.dist, h.polar, h.az, instant);
+    this.setView(h.target, h.dist, h.polar, h.az, instant);
   }
 
   panBy(right, forward) {
@@ -539,139 +446,133 @@ export class Diorama {
     this.controls.update();
   }
 
-  rotateBy(angle) {
-    const off = this.camera.position.clone().sub(this.controls.target);
-    off.applyAxisAngle(new THREE.Vector3(0, 1, 0), angle);
+  rotateBy(a) {
+    const off = this.camera.position.clone().sub(this.controls.target).applyAxisAngle(new THREE.Vector3(0, 1, 0), a);
     this.camera.position.copy(this.controls.target).add(off);
     this.controls.update();
   }
 
   zoomBy(f) {
     const off = this.camera.position.clone().sub(this.controls.target);
-    const len = THREE.MathUtils.clamp(off.length() * f, this.controls.minDistance, this.controls.maxDistance);
-    off.setLength(len);
+    off.setLength(THREE.MathUtils.clamp(off.length() * f, this.controls.minDistance, this.controls.maxDistance));
     this.camera.position.copy(this.controls.target).add(off);
     this.controls.update();
   }
 
-  focusBuilding(bid) {
-    const e = this.buildings.get(bid);
-    if (!e) return;
-    const off = this.camera.position.clone().sub(this.controls.target);
-    const sph = new THREE.Spherical().setFromVector3(off);
-    this.setView(new THREE.Vector3(e.group.position.x, 0.6, e.group.position.z), 10, Math.min(sph.phi, 1.0), sph.theta);
+  // ---------- lighting ----------
+
+  nightTarget(state) {
+    if (!state) return 0;
+    if (state.phase === 'night') return 1;
+    const left = state.dayLength - state.phaseT;
+    if (left < 14) return ((14 - left) / 14) * 0.8;
+    return 0;
   }
 
-  // ---------- picking ----------
-
-  bindPointer() {
-    const el = this.canvas;
-    let down = null;
-    const ray = new THREE.Raycaster();
-    const ndc = new THREE.Vector2();
-    const toNdc = (e) => {
-      const r = el.getBoundingClientRect();
-      ndc.set(((e.clientX - r.left) / r.width) * 2 - 1, -((e.clientY - r.top) / r.height) * 2 + 1);
-      ray.setFromCamera(ndc, this.camera);
-    };
-    this.pickAt = (e) => {
-      toNdc(e);
-      const hit = ray.intersectObjects(this.hitboxes, false)[0];
-      return hit ? hit.object.userData.bid : null;
-    };
-    this.plotAt = (e) => {
-      toNdc(e);
-      const plane = new THREE.Plane(new THREE.Vector3(0, 1, 0), -PAD_TOP);
-      const p = new THREE.Vector3();
-      if (!ray.ray.intersectPlane(plane, p)) return null;
-      return { gx: Math.round(p.x / PLOT), gz: Math.round(p.z / PLOT) };
-    };
-    el.addEventListener('pointerdown', (e) => { down = { x: e.clientX, y: e.clientY, t: performance.now() }; });
-    el.addEventListener('pointerup', (e) => {
-      if (!down) return;
-      const moved = Math.hypot(e.clientX - down.x, e.clientY - down.y);
-      const quick = performance.now() - down.t < 600;
-      down = null;
-      if (moved > 7 || !quick || e.button === 2) return;
-      if (this.placement) {
-        const plot = this.plotAt(e);
-        if (plot) this.h.onPlot?.(plot, e.pointerType);
-        return;
-      }
-      const bid = this.pickAt(e);
-      this.h.onSelect?.(bid);
+  stepLight(dt, state) {
+    const target = this.nightTarget(state);
+    const k = Math.min(1, dt * (target > this.night ? 1.2 : 0.5));
+    this.night += (target - this.night) * k;
+    const nf = this.night;
+    const p = state && state.phase === 'day' ? Math.min(1, state.phaseT / state.dayLength) : 1;
+    const P = this.sky.palette;
+    const u = this.sky.uniforms;
+    const tmp = new THREE.Color();
+    ['top', 'horizon', 'bottom'].forEach((key, i) => {
+      tmp.copy(P.day[i]).lerp(P.dusk[i], Math.min(1, nf * 2)).lerp(P.night[i], Math.max(0, nf * 2 - 1));
+      u[key].value.copy(tmp);
     });
-    let last = 0;
-    el.addEventListener('pointermove', (e) => {
-      if (e.pointerType !== 'mouse' || down) return;
-      const now = performance.now();
-      if (now - last < 50) return;
-      last = now;
-      if (this.placement) {
-        const plot = this.plotAt(e);
-        this.h.onPlotHover?.(plot);
-        return;
-      }
-      const bid = this.pickAt(e);
-      if (bid !== this.hovered) {
-        this.hovered = bid;
-        el.style.cursor = bid ? 'pointer' : '';
-        this.h.onHover?.(bid, e);
-      }
-    });
-    el.addEventListener('pointerleave', () => { this.hovered = null; this.h.onHover?.(null); });
-    el.addEventListener('contextmenu', (e) => e.preventDefault());
+    this.scene.fog.color.copy(u.horizon.value).lerp(u.bottom.value, 0.25);
+    const ang = Math.PI * (0.2 + 0.6 * p);
+    const elev = Math.max(0.15, Math.sin(ang)) * (1 - nf * 0.75);
+    const sun = new THREE.Vector3(Math.cos(ang) * 40, elev * 45 + 4, 22);
+    const moon = new THREE.Vector3(-26, 38, -18);
+    this.key.position.copy(nf > 0.6 ? moon : sun);
+    this.key.intensity = nf > 0.6 ? 1.25 : 2.5 * (1 - nf) + 0.6;
+    this.key.color.set(nf > 0.6 ? '#b4c2ff' : '#fff1dc').lerp(new THREE.Color('#ffae73'), nf <= 0.6 ? Math.min(1, nf * 1.6) * 0.7 : 0);
+    this.hemi.intensity = 0.95 - 0.3 * nf;
+    this.hemi.color.set('#e4efff').lerp(new THREE.Color('#7f8fd6'), nf);
+    this.hemi.groundColor.set('#6b5a48').lerp(new THREE.Color('#3a3550'), nf);
+    this.enemyMat.emissive.set('#000000').lerp(new THREE.Color('#2e2a26'), nf);
+    this.M.window.emissiveIntensity = 0.12 + 1.9 * nf;
+    this.M.torch.emissiveIntensity = 0.3 + 2.4 * nf;
+    this.M.rune.emissiveIntensity = 0.5 + 1.8 * nf;
+    this.sky.starMat.opacity = 0.15 + 0.8 * nf;
+    this.sky.cloudMat.color.set('#ffffff').lerp(new THREE.Color('#8e8fb8'), nf);
+    return nf;
   }
 
-  select(bid) {
-    this.selected = bid;
-    const e = bid && this.buildings.get(bid);
-    this.selRing.visible = !!e;
-    if (e) this.selRing.position.set(e.group.position.x, PAD_TOP + 0.02, e.group.position.z);
-  }
+  // ---------- particles ----------
 
-  // Placement preview: type to build, or `moving` building.
-  startPlacement({ type, level = 1, moving = null }) {
-    this.endPlacement();
-    this.placement = { type, level, moving, plot: null, ghost: null, valid: false };
-  }
-
-  previewPlot(plot, valid) {
-    const pl = this.placement;
-    if (!pl) return;
-    pl.plot = plot;
-    if (pl.ghost) { this.root.remove(pl.ghost); disposeGroup(pl.ghost); pl.ghost = null; }
-    if (plot) {
-      pl.ghost = ghostOf(buildModel(pl.type, pl.level, this.M), valid);
-      const p = plotCenter(plot.gx, plot.gz);
-      pl.ghost.position.set(p.x, PAD_TOP + 0.01, p.z);
-      this.root.add(pl.ghost);
+  emit(n, x, y, z, color, { speed = 1.2, up = 1.2, life = 0.8, grav = 3, home = false } = {}) {
+    if (this.reducedMotion) n = Math.ceil(n / 2);
+    const c = new THREE.Color(color);
+    for (let i = 0; i < n; i++) {
+      const p = this.pool.find((q) => q.life <= 0);
+      if (!p) return;
+      const a = Math.random() * Math.PI * 2;
+      const s = speed * (0.4 + Math.random() * 0.6);
+      Object.assign(p, { x, y, z, vx: Math.cos(a) * s, vz: Math.sin(a) * s, vy: up * (0.5 + Math.random() * 0.6), life: life * (0.7 + Math.random() * 0.5), max: life, r: c.r, g: c.g, b: c.b, grav, home });
     }
   }
 
-  endPlacement() {
-    if (this.placement?.ghost) { this.root.remove(this.placement.ghost); disposeGroup(this.placement.ghost); }
-    this.placement = null;
+  stepParticles(dt) {
+    for (let i = 0; i < this.pool.length; i++) {
+      const p = this.pool[i];
+      if (p.life > 0) {
+        p.life -= dt;
+        if (p.home) {
+          // gold sparks fly to the Town Hall
+          const dx = -p.x, dy = 1.9 - p.y, dz = -p.z;
+          const d = Math.hypot(dx, dy, dz) || 1;
+          const sp = 9 * Math.min(1, (p.max - p.life) * 1.5);
+          p.vx += ((dx / d) * sp - p.vx) * Math.min(1, dt * 4);
+          p.vy += ((dy / d) * sp - p.vy) * Math.min(1, dt * 4);
+          p.vz += ((dz / d) * sp - p.vz) * Math.min(1, dt * 4);
+          if (d < 0.4) p.life = 0;
+        } else p.vy -= p.grav * dt;
+        p.x += p.vx * dt; p.y += p.vy * dt; p.z += p.vz * dt;
+      }
+      const alive = p.life > 0;
+      this.pPos[i * 3] = p.x; this.pPos[i * 3 + 1] = alive ? p.y : -99; this.pPos[i * 3 + 2] = p.z;
+      const f = alive ? Math.min(1, p.life / (p.max * 0.5)) : 0;
+      this.pCol[i * 3] = p.r * f; this.pCol[i * 3 + 1] = p.g * f; this.pCol[i * 3 + 2] = p.b * f;
+    }
+    this.particles.geometry.attributes.position.needsUpdate = true;
+    this.particles.geometry.attributes.color.needsUpdate = true;
   }
 
-  screenPos(bid) {
-    const e = this.buildings.get(bid);
-    if (!e) return null;
-    const v = e.group.position.clone();
-    v.y += 2.2;
-    v.project(this.camera);
-    const r = this.canvas.getBoundingClientRect();
-    return { x: r.left + ((v.x + 1) / 2) * r.width, y: r.top + ((1 - v.y) / 2) * r.height };
+  consumeFx(b) {
+    if (!b) { this.seenFx = 0; this.fxNight = null; return; }
+    if (this.fxNight !== b.n || (b.fx.length && b.fx[b.fx.length - 1].id < this.seenFx)) { this.seenFx = 0; this.fxNight = b.n; }
+    for (const f of b.fx) {
+      if (f.id <= this.seenFx) continue;
+      this.seenFx = f.id;
+      if (f.kind === 'death') {
+        this.emit(9, f.x, 0.3, f.z, '#d9cbb0', { speed: 1.4, up: 1.4, life: 0.7 });
+        this.emit(Math.min(6, 1 + f.gold), f.x, 0.5, f.z, '#ffd75e', { speed: 0.8, up: 2.2, life: 1.6, home: true });
+        this.h.onFx?.('death');
+      } else if (f.kind === 'hit') {
+        this.emit(3, f.x, 0.35, f.z, '#fff4e0', { speed: 0.9, up: 0.8, life: 0.35 });
+        if (f.eid) this.hitTimes.set(f.eid, this.t);
+        if (this.hitTimes.size > 600) this.hitTimes.clear();
+        this.h.onFx?.('hit');
+      } else if (f.kind === 'wall') {
+        this.emit(4, f.x * 0.97, 0.5, f.z * 0.97, '#b9a07a', { speed: 1.0, up: 1.2, life: 0.6 });
+        this.emit(2, f.x * 0.97, 0.6, f.z * 0.97, '#ffb35c', { speed: 1.5, up: 1.6, life: 0.4 });
+        this.h.onFx?.('wall');
+      }
+    }
   }
 
-  // ---------- frame ----------
+  // ---------- per-frame ----------
 
-  frame() {
+  frame(state, alpha = 1) {
     const dt = Math.min(0.1, this.clock.getDelta());
     this.t += dt;
-    const night = this.stepSky(dt);
-    if (this.focusAnim) {
-      const f = this.focusAnim;
+    const nf = this.stepLight(dt, state);
+    if (this.anim) {
+      const f = this.anim;
       f.t = Math.min(1, f.t + dt / 0.6);
       const k = 1 - (1 - f.t) ** 3;
       this.applyView({
@@ -680,72 +581,198 @@ export class Diorama {
         polar: THREE.MathUtils.lerp(f.from.polar, f.to.polar, k),
         az: f.from.az + (((f.to.az - f.from.az + Math.PI * 3) % (Math.PI * 2)) - Math.PI) * k,
       });
-      if (f.t >= 1) this.focusAnim = null;
+      if (f.t >= 1) this.anim = null;
     }
     this.controls.update();
-    const speed = this.reducedMotion ? 0.35 : 1;
-    const t = this.t * speed;
+    const motion = this.reducedMotion ? 0.4 : 1;
+    const t = this.t * motion;
+    const b = state?.battle || null;
+    const fighting = !!b;
+
+    // building animations
     for (const e of this.buildings.values()) {
       for (const a of e.model.userData.anims) {
-        const on = e.running || a.type === 'blink' || a.type === 'flutter' || a.type === 'track';
-        if (!on) continue;
         const o = a.obj;
-        switch (a.type) {
-          case 'spin': o.rotation[a.axis] += dt * a.speed * speed; break;
-          case 'drill': o.rotation.y += dt * a.speed * speed; o.position.y = a.base.y + Math.sin(t * 2) * 0.06; break;
-          case 'blink': o.visible = this.reducedFlashing ? true : Math.sin(this.t * a.speed * Math.PI * 2) > -0.2; break;
-          case 'flutter': o.rotation.y = a.base.rot.y + Math.sin(t * a.speed) * 0.25; break;
-          case 'pulse': o.scale.setScalar(1 + Math.sin(t * a.speed) * (this.reducedFlashing ? 0.04 : 0.14)); break;
-          case 'flame': o.scale.set(1, 1 + Math.sin(t * a.speed) * 0.25 + Math.sin(t * a.speed * 2.3) * 0.12, 1); break;
-          case 'sway': o.rotation.y = Math.sin(t * a.speed) * 0.9; break;
-          case 'track': {
-            const s = this.sunDir || new THREE.Vector3(0, 1, 0);
-            const tilt = night > 0.7 ? 0 : Math.atan2(s.x, s.y) * 0.45;
-            o.rotation.z += (-tilt - o.rotation.z) * Math.min(1, dt * 0.8);
-            o.rotation.x = 0.18;
-            break;
-          }
-          default: break;
+        if (a.type === 'flutter') o.rotation.y = a.base.rot.y + Math.sin(t * a.speed) * 0.25;
+        else if (a.type === 'archer') {
+          const draw = fighting ? Math.sin(t * 6 + a.phase) : Math.sin(t * 0.7 + a.phase) * 0.2;
+          o.rotation.y = fighting ? Math.atan2(-o.parent.position.x - o.position.x, -o.parent.position.z - o.position.z) + Math.PI + draw * 0.15 : a.base.rot.y + draw;
+          o.position.y = a.base.y + (fighting ? Math.max(0, draw) * 0.02 : 0);
+        } else if (a.type === 'graze') o.rotation.y = Math.sin(t * 0.3) * 1.2;
+      }
+    }
+    for (const p of this.portals.values()) {
+      const glow = p.g.userData.glow;
+      if (glow) glow.material.opacity = 0.25 + nf * 0.45 + (fighting ? 0.15 : 0) + Math.sin(t * 1.7) * (this.reducedFlashing ? 0 : 0.06);
+      for (const a of p.g.userData.anims) {
+        a.obj.rotation.z = t * 0.8;
+        const s = 1 + Math.sin(t * 2.2) * (this.reducedFlashing ? 0.01 : 0.04);
+        a.obj.scale.set(0.95 * s, 1.45 * s, 1);
+        a.obj.material.color.set('#2a1840').lerp(new THREE.Color('#7b3fd1'), 0.25 + nf * 0.55 + (fighting ? 0.2 : 0));
+      }
+    }
+
+    // range ring and routes
+    const showRange = this.selected === 'archery' || fighting || nf > 0.2;
+    this.rangeMat.opacity += ((showRange ? (this.selected === 'archery' ? 0.6 : 0.28) : 0) - this.rangeMat.opacity) * Math.min(1, dt * 4);
+    this.rangeRing.visible = this.rangeMat.opacity > 0.01;
+    this.drawRoutes(state, fighting, t);
+
+    // enemies
+    const counts = { goblin: 0, wolf: 0 };
+    const m4 = new THREE.Matrix4();
+    const q = new THREE.Quaternion();
+    const v = new THREE.Vector3();
+    const s1 = new THREE.Vector3(1, 1, 1);
+    const sE = new THREE.Vector3(ENEMY_SCALE, ENEMY_SCALE, ENEMY_SCALE);
+    const sA = new THREE.Vector3(1.6, 1.6, 1.6);
+    const up = new THREE.Vector3(0, 1, 0);
+    const white = new THREE.Color('#ffffff');
+    const flash = new THREE.Color('#ff9a8a');
+    const camQ = this.camera.quaternion;
+    const right = new THREE.Vector3(1, 0, 0).applyQuaternion(camQ);
+    let bars = 0;
+    this.consumeFx(b);
+    if (b) {
+      for (const e of b.enemies) {
+        const mesh = this.enemyMesh[e.type];
+        if (!mesh) continue;
+        const i = counts[e.type]++;
+        const x = e.px + (e.x - e.px) * alpha;
+        const z = e.pz + (e.z - e.pz) * alpha;
+        const ph = (parseInt(e.id.slice(1), 10) || 0) * 1.3;
+        let y = 0.02;
+        let lunge = 0;
+        if (e.state === 'attack') lunge = Math.max(0, Math.sin(t * e.rate * 6.28 + ph)) * 0.12;
+        else y += Math.abs(Math.sin(t * e.speed * 9 + ph)) * 0.05 * motion;
+        const hdg = e.heading;
+        q.setFromAxisAngle(up, hdg);
+        v.set(x + Math.sin(hdg) * lunge, y, z + Math.cos(hdg) * lunge);
+        m4.compose(v, q, sE);
+        mesh.setMatrixAt(i, m4);
+        mesh.setColorAt(i, this.t - (this.hitTimes.get(e.id) ?? -9) < 0.12 && !this.reducedFlashing ? flash : white);
+        if (e.hp < e.max) {
+          const frac = Math.max(0, e.hp / e.max);
+          const hy = ENEMY_H[e.type] || 0.6;
+          v.set(x, hy + 0.12, z);
+          m4.compose(v, camQ, new THREE.Vector3(0.6, 0.1, 1));
+          this.barBg.setMatrixAt(bars, m4);
+          v.set(x, hy + 0.12, z).addScaledVector(right, -0.27 * (1 - frac));
+          m4.compose(v, camQ, new THREE.Vector3(0.54 * frac, 0.06, 1));
+          this.barFg.setMatrixAt(bars, m4);
+          this.barFg.setColorAt(bars, new THREE.Color().setHSL(0.02 + 0.3 * frac, 0.75, 0.55));
+          bars++;
         }
       }
-      if (e.scaffold && e.scaffold.userData.working) {
-        for (const a of e.scaffold.userData.anims) a.obj.rotation.y = Math.sin(t * 0.6) * 1.1;
-      }
-      if (e.badge) e.badge.position.y = 2.3 + Math.sin(this.t * 2) * (this.reducedMotion ? 0 : 0.05);
     }
+    for (const [k, m] of Object.entries(this.enemyMesh)) {
+      m.count = counts[k];
+      m.instanceMatrix.needsUpdate = true;
+      if (m.instanceColor) m.instanceColor.needsUpdate = true;
+    }
+    this.barBg.count = bars;
+    this.barFg.count = bars;
+    this.barBg.instanceMatrix.needsUpdate = true;
+    this.barFg.instanceMatrix.needsUpdate = true;
+    if (this.barFg.instanceColor) this.barFg.instanceColor.needsUpdate = true;
+
+    // arrows
+    let na = 0;
+    if (b) {
+      const top = this.buildings.get('archery')?.model.userData.top || 2.4;
+      for (const s of b.shots) {
+        if (na >= MAX_SHOTS) break;
+        const x = s.px + (s.x - s.px) * alpha;
+        const z = s.pz + (s.z - s.pz) * alpha;
+        const rem = Math.hypot(s.lx - x, s.lz - z);
+        const total = s.travelled + rem + 1e-6;
+        const p = Math.min(1, s.travelled / total);
+        const arc = Math.min(1.2, total * 0.12);
+        const y = THREE.MathUtils.lerp(top, 0.35, p) + Math.sin(Math.PI * p) * arc;
+        const dy = (0.35 - top) / total + (Math.PI * arc * Math.cos(Math.PI * p)) / total;
+        const dir = new THREE.Vector3(s.lx - s.sx, 0, s.lz - s.sz).normalize();
+        dir.y = dy;
+        dir.normalize();
+        q.setFromUnitVectors(new THREE.Vector3(0, 0, 1), dir);
+        v.set(x, y, z);
+        m4.compose(v, q, sA);
+        this.arrows.setMatrixAt(na++, m4);
+      }
+    }
+    this.arrows.count = na;
+    this.arrows.instanceMatrix.needsUpdate = true;
+
+    this.stepParticles(dt);
+    this.stepVillagers(dt * motion, nf);
+
     for (const c of this.sky.clouds) {
       if (!this.reducedMotion) c.userData.a += dt * c.userData.speed;
-      c.position.x = (this.island?.center.x || 0) + Math.cos(c.userData.a) * c.userData.r;
-      c.position.z = (this.island?.center.z || 0) + Math.sin(c.userData.a) * c.userData.r;
+      c.position.x = Math.cos(c.userData.a) * c.userData.r;
+      c.position.z = Math.sin(c.userData.a) * c.userData.r;
     }
     this.sky.group.position.copy(this.camera.position).setY(0);
     this.sky.planet.rotation.y += dt * 0.01;
-    this.stepPeople(dt * (this.reducedMotion ? 0.7 : 1));
-    this.stepParticles(dt, night);
-    if (this.selRing.visible) this.selRing.material.opacity = 0.65 + Math.sin(this.t * 3) * (this.reducedFlashing ? 0 : 0.25);
-    if (this.hovered && this.hovered !== this.selected) {
-      const e = this.buildings.get(this.hovered);
-      if (e) { this.hoverRing.visible = true; this.hoverRing.position.set(e.group.position.x, PAD_TOP + 0.015, e.group.position.z); }
-    } else this.hoverRing.visible = false;
-    if (this.followId) {
-      const p = this.people.get(this.followId);
-      if (p) {
-        const d = p.mesh.position.clone().setY(0.4).sub(this.controls.target);
-        this.controls.target.add(d.multiplyScalar(Math.min(1, dt * 3)));
-        this.camera.position.add(d);
-      }
-    }
+    if (this.selRing.visible) this.selMat.opacity = 0.7 + Math.sin(this.t * 3) * (this.reducedFlashing ? 0 : 0.2);
+    if (this.hovered && this.hovered !== this.selected) this.placeSelection(this.hovered, this.hoverRing);
+    else this.hoverRing.visible = false;
     this.renderer.render(this.scene, this.camera);
   }
 
-  follow(colonistId) {
-    this.followId = colonistId;
-    if (colonistId) this.zoomBy(0.55);
+  drawRoutes(state, fighting, t) {
+    const show = state && !fighting && (state.phase === 'day');
+    const sel = this.selected?.startsWith('spawn:') ? this.selected.slice(6) : null;
+    let n = 0;
+    if (show || sel) {
+      const m4 = new THREE.Matrix4();
+      const off = (t * 0.6) % 0.5;
+      for (const r of this.routes) {
+        if (sel && r.id !== sel && !show) continue;
+        const pts = r.pts;
+        let carry = 0.5 - off;
+        for (let i = 0; i < pts.length - 1 && n < MAX_DOTS; i++) {
+          const [ax, az] = pts[i];
+          const [bx, bz] = pts[i + 1];
+          const len = Math.hypot(bx - ax, bz - az);
+          let d = carry;
+          while (d < len && n < MAX_DOTS) {
+            const k = d / len;
+            m4.makeTranslation(ax + (bx - ax) * k, 0.05, az + (bz - az) * k);
+            this.dots.setMatrixAt(n++, m4);
+            d += 0.5;
+          }
+          carry = d - len;
+        }
+      }
+    }
+    this.dots.count = n;
+    this.dots.instanceMatrix.needsUpdate = true;
+    this.dotMat.opacity = sel ? 0.95 : 0.6;
   }
-}
 
-function hashStr(s) {
-  let h = 0;
-  for (let i = 0; i < s.length; i++) h = (h * 31 + s.charCodeAt(i)) | 0;
-  return h;
+  stepVillagers(dt, nf) {
+    for (const p of this.people) {
+      const g = p.g;
+      if (nf > 0.55) {
+        // everyone heads indoors for the night
+        if (!p.indoors) { p.path = [[0, 0.9]]; p.indoors = true; }
+      } else if (p.indoors) { p.indoors = false; g.visible = true; p.wait = Math.random() * 2; }
+      if (p.path.length) {
+        const [tx, tz] = p.path[0];
+        const dx = tx - g.position.x, dz = tz - g.position.z;
+        const d = Math.hypot(dx, dz);
+        const step = 0.8 * dt;
+        if (d <= step) { g.position.x = tx; g.position.z = tz; p.path.shift(); if (!p.path.length) p.wait = 2 + Math.random() * 5; }
+        else { g.position.x += (dx / d) * step; g.position.z += (dz / d) * step; g.rotation.y = Math.atan2(dx, dz); }
+        p.phase += dt * 10;
+        g.position.y = 0.02 + Math.abs(Math.sin(p.phase)) * 0.03;
+        if (p.indoors && !p.path.length) g.visible = false;
+        continue;
+      }
+      if (p.indoors) continue;
+      p.wait -= dt;
+      if (p.wait > 0) continue;
+      const s = this.spots[Math.floor(Math.random() * this.spots.length)];
+      p.path = [[(Math.random() - 0.5) * 1.2, 1.6 + (Math.random() - 0.5) * 0.6], [s[0], s[1]]];
+    }
+  }
 }

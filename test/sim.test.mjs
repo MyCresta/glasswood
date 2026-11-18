@@ -1,243 +1,207 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { newGame, colonistsAt, buildingAt } from '../js/sim/state.js';
-import { computeColony, capacities, housing } from '../js/sim/economy.js';
-import { makeEvents, advance, catchUp, OFFLINE_CAP } from '../js/sim/tick.js';
-import * as A from '../js/sim/actions.js';
-import { setActiveTech, queueTech } from '../js/sim/research.js';
+import { newGame } from '../js/sim/state.js';
+import { defaultField, buildFlowField, routeFrom, spawnPos, TERRAIN } from '../js/sim/map.js';
+import { SPAWNS, wallStats, archeryStats, DAY_LENGTH } from '../js/data/village.js';
+import { makeEvents, advance, tick, catchUp, callNight, pump } from '../js/sim/time.js';
+import { waveSchedule, waveComposition, safeNight, activeSpawns } from '../js/sim/battle.js';
+import { queueUpgrade, cancelUpgrade, upgradeBlocker, upgradeCost } from '../js/sim/village.js';
 
-const fresh = () => newGame({ seed: 42, now: 0 });
-const home = (s) => s.colonies[0];
-const near = (a, b, eps = 1e-6) => assert.ok(Math.abs(a - b) < eps, `${a} ≈ ${b}`);
+const fresh = () => newGame({ seed: 7, now: 0 });
+const ev = (s) => makeEvents(s);
+const runNight = (s) => {
+  const e = ev(s);
+  if (s.phase === 'day') callNight(s, e);
+  let g = 0;
+  while (s.phase === 'night' && g++ < 40000) tick(s, 0.05, e);
+  return e;
+};
 
-test('starting colony matches the plan', () => {
-  const s = fresh();
-  const c = home(s);
-  assert.deepEqual(capacities(c), { metal: 600, food: 300, fuel: 180, samples: 30 });
-  assert.equal(housing(c), 6);
-  assert.deepEqual(c.inv, { metal: 200, fuel: 40, food: 80, samples: 0 });
-  assert.equal(colonistsAt(s, c.id).length, 3);
-  assert.deepEqual(colonistsAt(s, c.id).map((p) => p.profession).sort(), ['engineer', 'miner', 'scientist']);
-  const snap = computeColony(s, c);
-  assert.equal(snap.power.supply, 8);
-  assert.equal(snap.power.demand, 3);
-  assert.equal(s.research.bank, 0);
+test('every spawn point has a route to the walls', () => {
+  const f = defaultField();
+  for (const sp of SPAWNS) {
+    const [x, z] = spawnPos(sp);
+    const r = routeFrom(f, x, z);
+    assert.ok(isFinite(r.length), `${sp.name} reachable`);
+    assert.ok(r.length > 6 && r.length < 14, `${sp.name} length ${r.length}`);
+  }
 });
 
-test('staffing, profession and relief rates', () => {
-  const s = fresh();
-  const c = home(s);
-  const snap = computeColony(s, c);
-  const ext = c.buildings.find((b) => b.type === 'extractor');
-  const miner = snap.workerOf[ext.id];
-  let expectBonus = 0.6; // 50% + matching 10% at level 1
-  if (miner.traits.includes('diligent')) expectBonus += 0.05;
-  if (miner.traits.includes('homebody')) expectBonus *= 1.1;
-  near(snap.info[ext.id].output.metal, 12 * (1 + expectBonus));
-  near(snap.reliefRate, 2); // the idle scientist salvages 2 Metal/min
-  near(snap.cons.food, 0.3);
+test('obstacles lengthen routes (groundwork for mazes)', () => {
+  const tiles = TERRAIN.slice();
+  const [x, z] = spawnPos(SPAWNS[0]);
+  const before = routeFrom(buildFlowField(tiles), x, z).length;
+  for (let i = 10; i <= 30; i++) if (tiles[8 * 41 + i] === 0) tiles[8 * 41 + i] = 4;
+  const after = routeFrom(buildFlowField(tiles), x, z).length;
+  assert.ok(after > before, `route ${before.toFixed(1)} → ${after.toFixed(1)}`);
 });
 
-test('one minute of production is applied and capped by storage', () => {
+test('starting state', () => {
   const s = fresh();
-  const c = home(s);
-  const before = c.inv.metal;
-  const snap = computeColony(s, c);
-  advance(s, 60, makeEvents(s), 1);
-  near(c.inv.metal, before + snap.gross.metal, 1e-6);
-  c.inv.metal = 599.9;
-  advance(s, 60, makeEvents(s), 1);
-  assert.equal(c.inv.metal, 600);
-  const ext = c.buildings.find((b) => b.type === 'extractor');
-  assert.equal(c.runtime[ext.id].reason, 'storage full');
+  assert.equal(s.gold, 150);
+  assert.equal(s.integrity, 500);
+  assert.equal(s.night, 1);
+  assert.equal(s.phase, 'day');
+  assert.deepEqual(activeSpawns(1).map((x) => x.id), ['hollow']);
+  assert.equal(activeSpawns(5).length, 2);
 });
 
-test('construction reserves costs, cannot double-spend, and refunds on cancel', () => {
-  const s = fresh();
-  const c = home(s);
-  c.inv.metal = 100;
-  const r1 = A.placeBuilding(s, c.id, 'lab', 0, 1);
-  assert.ok(r1.ok);
-  assert.equal(c.reserved.metal, 90);
-  const r2 = A.placeBuilding(s, c.id, 'extractor', -2, -2);
-  assert.equal(r2.ok, false);
-  assert.match(r2.reason, /Needs 50 more Metal/);
-  A.cancelQueueItem(s, c.id, c.queue[0].id);
-  assert.equal(c.reserved.metal, 0);
-  assert.equal(c.inv.metal, 100);
-  assert.equal(buildingAt(c, 0, 1), undefined);
+test('waves are deterministic and grow', () => {
+  assert.deepEqual(waveSchedule(7, 4), waveSchedule(7, 4));
+  const c1 = waveComposition(1);
+  const c9 = waveComposition(9);
+  assert.equal(c1.wolf, 0);
+  assert.ok(c9.goblin + c9.wolf > c1.goblin + c1.wolf);
+  assert.ok(c9.wolf > 0);
 });
 
-test('construction completes with supporting engineer speed', () => {
+test('the first day ends, and the archers win night 1 untouched', () => {
   const s = fresh();
-  const c = home(s);
-  A.placeBuilding(s, c.id, 'lab', 0, 1);
-  const snap = computeColony(s, c);
-  assert.ok(snap.speed >= 1.1);
-  advance(s, 30 / snap.speed + 0.5, makeEvents(s), 0.5);
-  const lab = buildingAt(c, 0, 1);
-  assert.equal(lab.level, 1);
-  assert.equal(c.reserved.metal, 0);
+  const e = ev(s);
+  advance(s, 61, e);
+  assert.equal(s.phase, 'night');
+  let g = 0;
+  while (s.phase === 'night' && g++ < 40000) tick(s, 0.05, e);
+  assert.equal(s.phase, 'day');
+  assert.equal(s.lastReport.won, true);
+  assert.equal(s.lastReport.kills, s.lastReport.total);
+  assert.equal(s.lastReport.wallDamage, 0);
+  assert.equal(s.night, 2);
+  assert.equal(s.best, 1);
+  assert.ok(s.gold > 150);
+  assert.equal(s.dayLength, DAY_LENGTH);
 });
 
-test('upgrade cost and time follow the formulas', () => {
+test('enemies that reach the walls damage integrity', () => {
   const s = fresh();
-  const c = home(s);
-  const ext = c.buildings.find((b) => b.type === 'extractor');
-  assert.deepEqual(A.upgradeCost(ext), { metal: 96 });
-  near(A.upgradeTime(ext), 27);
-  ext.level = 3;
-  assert.deepEqual(A.upgradeCost(ext), { metal: Math.ceil(60 * 1.6 ** 3) });
+  s.buildings.archery.level = 1;
+  s.night = 6;
+  callNight(s, ev(s));
+  s.battle.cd = 1e9; // archers asleep
+  advance(s, 20, ev(s));
+  assert.equal(s.phase, 'night');
+  assert.ok(s.integrity < 500);
 });
 
-test('queue holds one active and four waiting', () => {
+test('losing a night costs 10% of gold and falls back two nights; nothing else is lost', () => {
   const s = fresh();
-  const c = home(s);
-  c.inv.metal = 600;
-  const spots = [[-2, -2], [-1, -2], [0, -2], [1, -2], [-2, 1], [0, 1]];
-  const res = spots.map(([x, z]) => A.placeBuilding(s, c.id, 'farm', x, z));
-  assert.deepEqual(res.map((r) => r.ok), [true, true, true, true, true, false]);
-  assert.match(res[5].reason, /queue is full/);
+  s.night = 9;
+  s.best = 9;
+  s.integrity = 3;
+  s.gold = 1000;
+  const e = runNight(s);
+  assert.equal(s.lastReport.won, false);
+  assert.ok(s.lastReport.lost >= 100 && s.lastReport.lost <= 120, `lost ${s.lastReport.lost}`);
+  assert.equal(s.night, 7);
+  assert.equal(s.integrity, wallStats(1).integrity, 'walls repaired at dawn');
+  assert.equal(s.buildings.archery.level, 1);
+  assert.ok(e.list.some((x) => x.level === 'attention'));
 });
 
-test('refinery scales down instead of wasting Metal', () => {
+test('hold repeats the same night', () => {
   const s = fresh();
-  s.research.done.push('fuel_refining');
-  const c = home(s);
-  const r = A.placeBuilding(s, c.id, 'refinery', 0, 1);
-  assert.ok(r.ok);
-  advance(s, 40, makeEvents(s), 1);
-  c.buildings.filter((b) => b.type === 'extractor').forEach((b) => (b.enabled = false));
-  for (const p of colonistsAt(s, c.id)) p.assign = { kind: 'support' }; // no relief Metal
-  c.inv.metal = 1; // only enough for 15 seconds at 4/min
-  const fuel0 = c.inv.fuel;
-  advance(s, 60, makeEvents(s), 1);
-  assert.ok(c.inv.metal >= 0);
-  near(c.inv.metal, 0, 1e-6);
-  near(c.inv.fuel - fuel0, 0.5, 1e-6); // 1 Metal → 0.5 Fuel, never more
+  s.hold = true;
+  runNight(s);
+  assert.equal(s.night, 1);
+  assert.equal(s.lastResult[1], 'won');
 });
 
-test('power shortage pauses lowest-priority buildings first', () => {
+test('upgrades reserve gold, respect Town Hall caps and refund on cancel', () => {
   const s = fresh();
-  const c = home(s);
-  const solar = c.buildings.find((b) => b.type === 'solar');
-  solar.enabled = false; // only HQ's 2 power
-  const snap = computeColony(s, c);
-  const farm = c.buildings.find((b) => b.type === 'farm');
-  const ext = c.buildings.find((b) => b.type === 'extractor');
-  assert.equal(snap.info[farm.id].status, 'running');
-  assert.equal(snap.info[ext.id].status, 'unpowered');
-  ext.priority = 'high';
-  const snap2 = computeColony(s, c);
-  assert.equal(snap2.info[ext.id].status, 'running');
-  assert.equal(snap2.info[farm.id].status, 'unpowered');
+  assert.equal(upgradeCost('archery', 1), 40);
+  assert.ok(queueUpgrade(s, 'archery').ok);
+  assert.equal(s.reserved, 40);
+  assert.equal(queueUpgrade(s, 'archery').ok, false, 'one entry per building');
+  assert.ok(cancelUpgrade(s, s.queue[0].id).ok);
+  assert.equal(s.reserved, 0);
+  assert.ok(queueUpgrade(s, 'archery').ok);
+  advance(s, 16, ev(s));
+  assert.equal(s.buildings.archery.level, 2);
+  assert.equal(s.gold, 140, '150 − 40 + 30 objective reward');
+  assert.match(upgradeBlocker(s, 'archery'), /Town Hall to level 2/);
+  assert.match(upgradeBlocker(s, 'farmstead'), /Milestone 3/);
+  s.gold = 10;
+  assert.match(upgradeBlocker(s, 'walls'), /more gold/);
 });
 
-test('food shortage halves bonuses and never kills colonists', () => {
+test('walls upgrade raises integrity', () => {
   const s = fresh();
-  const c = home(s);
-  c.buildings.find((b) => b.type === 'farm').enabled = false;
-  c.inv.food = 0.01;
-  advance(s, 600, makeEvents(s), 1);
-  assert.equal(c.foodShort, true);
-  assert.equal(colonistsAt(s, c.id).length, 3);
-  const snap = computeColony(s, c);
-  const ext = c.buildings.find((b) => b.type === 'extractor');
-  assert.ok(snap.info[ext.id].bonus.staff.total < 0.4);
-  // Relief food work brings recovery without any reward
-  c.reliefMode = 'food';
-  advance(s, 120, makeEvents(s), 1);
-  assert.equal(c.foodShort, false);
-  assert.ok(c.inv.food > 0);
+  queueUpgrade(s, 'walls');
+  advance(s, 21, ev(s));
+  assert.equal(s.buildings.walls.level, 2);
+  assert.equal(s.integrity, wallStats(2).integrity);
 });
 
-test('offline catch-up is capped at 24h and never credited twice', () => {
+test('offline: safe-night rewards, 24h cap, no losses, no double credit', () => {
   const s = fresh();
-  const ev = makeEvents(s);
-  const r = catchUp(s, 48 * 3600 * 1000, ev);
-  assert.equal(r.credited, OFFLINE_CAP);
-  near(s.time, OFFLINE_CAP, 1e-3);
-  const r2 = catchUp(s, 48 * 3600 * 1000, makeEvents(s));
-  assert.equal(r2.credited, 0);
-  near(s.time, OFFLINE_CAP, 1e-3);
+  runNight(s);
+  runNight(s);
+  assert.equal(safeNight(s), 2);
+  const gold = s.gold;
+  const night = s.night;
+  const r = catchUp(s, 48 * 3600 * 1000, ev(s));
+  assert.equal(r.credited, 24 * 3600);
+  assert.equal(r.nights, 480);
+  assert.equal(s.gold, gold + r.gold);
+  assert.ok(r.gold > 0);
+  assert.equal(s.night, night, 'siege level unchanged');
+  assert.equal(catchUp(s, 48 * 3600 * 1000, ev(s)).credited, 0);
 });
 
-test('paused games make no progress', () => {
+test('offline before any won night gives no night rewards; upgrades still finish', () => {
+  const s = fresh();
+  queueUpgrade(s, 'walls');
+  const r = catchUp(s, 3600 * 1000, ev(s));
+  assert.equal(r.nights, 0);
+  assert.equal(s.buildings.walls.level, 2);
+});
+
+test('an interrupted night is abandoned without loss', () => {
+  const s = fresh();
+  callNight(s, ev(s));
+  advance(s, 10, ev(s));
+  const r = catchUp(s, s.lastTick + 600 * 1000, ev(s));
+  assert.ok(r.interrupted);
+  assert.equal(s.phase, 'day');
+  assert.equal(s.night, 1);
+  assert.equal(s.lastResult[1], undefined);
+});
+
+test('pump: pausing stops time, and night speed only speeds up nights', () => {
   const s = fresh();
   s.paused = true;
-  const m = home(s).inv.metal;
-  catchUp(s, 3600 * 1000, makeEvents(s));
-  assert.equal(home(s).inv.metal, m);
-  assert.equal(s.lastTick, 3600 * 1000);
+  const carry = { ms: 0 };
+  pump(s, 5000, carry, ev(s));
+  assert.equal(s.time, 0);
+  s.paused = false;
+  pump(s, 15000, carry, ev(s));
+  assert.ok(Math.abs(s.time - 10) < 0.06);
+  callNight(s, ev(s));
+  s.speed = 2;
+  const t0 = s.time;
+  pump(s, 16000, carry, ev(s));
+  assert.ok(Math.abs(s.time - t0 - 2) < 0.06);
 });
 
-test('research bank flows into projects and the queue', () => {
-  const s = fresh();
-  s.research.bank = 100;
-  assert.ok(setActiveTech(s, 'fuel_refining', makeEvents(s)).ok);
-  assert.ok(s.research.done.includes('fuel_refining'));
-  near(s.research.bank, 70);
-  assert.ok(setActiveTech(s, 'efficient_extraction', makeEvents(s)).ok);
-  assert.equal(s.research.progress.efficient_extraction, 70);
-  assert.equal(s.research.bank, 0);
-  assert.equal(queueTech(s, 'cargo_logistics').ok, false); // later milestone
+test('deterministic, and survives JSON round-trips mid-night', () => {
+  const a = fresh();
+  const b = JSON.parse(JSON.stringify(a));
+  runNight(a);
+  runNight(b);
+  assert.equal(a.gold, b.gold);
+  const mid = fresh();
+  mid.night = 7;
+  callNight(mid, ev(mid));
+  advance(mid, 15, ev(mid));
+  const copy = JSON.parse(JSON.stringify(mid));
+  advance(mid, 30, ev(mid));
+  advance(copy, 30, ev(copy));
+  assert.equal(mid.integrity, copy.integrity);
+  assert.equal(mid.battle?.kills, copy.battle?.kills);
 });
 
-test('demolition blocks stranding residents and refunds half', () => {
-  const s = fresh();
-  const c = home(s);
-  const hab = c.buildings.find((b) => b.type === 'habitat');
-  const pv = A.demolishPreview(s, c.id, hab.id);
-  assert.ok(pv.blockers.some((b) => /residents/.test(b)));
-  const farm = c.buildings.find((b) => b.type === 'farm');
-  const m = c.inv.metal;
-  assert.ok(A.demolish(s, c.id, farm.id).ok);
-  assert.equal(c.inv.metal, m + 20);
-  const depot = c.buildings.find((b) => b.type === 'depot');
-  c.inv.metal = 500;
-  assert.equal(A.demolish(s, c.id, depot.id).ok, false);
-});
-
-test('recruitment waits for housing and refunds on cancel', () => {
-  const s = fresh();
-  const c = home(s);
-  const cand = c.recruit.candidates[0];
-  assert.ok(A.startRecruit(s, c.id, cand.id).ok);
-  assert.equal(c.reserved.metal, 50);
-  assert.ok(A.cancelRecruit(s, c.id).ok);
-  assert.equal(c.reserved.metal, 0);
-  assert.ok(A.startRecruit(s, c.id, cand.id).ok);
-  advance(s, 181, makeEvents(s), 1);
-  assert.equal(colonistsAt(s, c.id).length, 4);
-  assert.equal(c.reserved.metal, 0);
-});
-
-test('experience levels a working colonist', () => {
-  const s = fresh();
-  const c = home(s);
-  advance(s, 60 * 10, makeEvents(s), 2);
-  const miner = colonistsAt(s, c.id).find((p) => p.profession === 'miner');
-  assert.ok(miner.skills.miner.level >= 2);
-});
-
-test('pacing: lab and first research inside the early window', () => {
-  const s = fresh();
-  const c = home(s);
-  const ev = makeEvents(s);
-  assert.ok(A.placeBuilding(s, c.id, 'lab', 0, 1).ok);
-  advance(s, 40, ev, 1);
-  const sci = colonistsAt(s, c.id).find((p) => p.profession === 'scientist');
-  A.assignColonist(s, sci.id, { kind: 'building', bid: buildingAt(c, 0, 1).id });
-  setActiveTech(s, 'fuel_refining', ev);
-  advance(s, 10 * 60, ev, 2);
-  assert.ok(s.research.done.includes('fuel_refining'), 'Fuel Refining within ~10 minutes');
-});
-
-test('save data round-trips through JSON', () => {
-  const s = fresh();
-  advance(s, 300, makeEvents(s), 2);
-  const copy = JSON.parse(JSON.stringify(s));
-  advance(s, 60, makeEvents(s), 2);
-  advance(copy, 60, makeEvents(copy), 2);
-  near(home(s).inv.metal, home(copy).inv.metal, 1e-6);
+test('archery stats grow as described', () => {
+  assert.equal(archeryStats(5).shots, 2);
+  assert.equal(archeryStats(10).pierce, true);
+  assert.ok(archeryStats(3).range > archeryStats(1).range);
 });
