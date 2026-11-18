@@ -1,3 +1,6 @@
 node_modules/
 .DS_Store
 _site/
+tools/design/desk/
+tools/design/art2/
+__pycache__/

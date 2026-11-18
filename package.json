@@ -1,1 +1,0 @@
-{"type":"module","name":"asterwake","private":true,"scripts":{"test":"node --test test/*.test.mjs"}}
