@@ -14,10 +14,22 @@ The interface is the desk: worn notes, a leather index card, wax seals and a dec
 
 ## Status
 
-Design and planning. The plan is in [docs/plan.md](docs/plan.md) and the design references are in [docs/design](docs/design/README.md).
+Milestone 1 is under way: the Watch view is playable. Train the tower, mend the walls, block forest paths with up to three barricades (the glass shows the new routes before you commit), and watch goblins and wolves walk the long way round. Wilds and Hearth come later.
+
+Play at https://mycresta.github.io/glasswood/. Keys: N calls the night, X switches night speed, Space pauses.
+
+The plan is in [docs/plan.md](docs/plan.md) and the design references are in [docs/design](docs/design/README.md) (also viewable at `/docs/design/` on the site).
 
 The earlier 3D version (Three.js) is on the [`3d-prototype`](../../tree/3d-prototype) branch. Its simulation, saving and tests carry over into the 2D game.
 
 ## Running
 
-There is no build step. When the game code lands, serve the folder with any static server, for example `python3 -m http.server`, and open it in a browser. GitHub Pages deploys `main` automatically.
+There is no build step. Serve the folder with any static server, for example `python3 -m http.server`, and open it in a browser. `npm test` runs the simulation tests with Node 22. GitHub Pages deploys `main` automatically after the tests pass.
+
+## How it is built
+
+- `js/sim`: the deterministic simulation (clock, nights, path web, barricades, upgrades, offline time).
+- `js/data`: balance numbers and the path web (`web.js`, exported from the design scripts).
+- `js/render/watch.js`: the live SVG layer under the reading glass (routes, barricades, creatures, arrows).
+- `js/ui/notes.js`: the notes on the desk.
+- `assets/`: the static artwork under and over the glass, drawn by `tools/design/make_game_assets.py` and rasterized by `tools/design/rasterize.py`.

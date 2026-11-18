@@ -4,56 +4,25 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Glasswood</title>
+<meta name="description" content="A cosy tower defence inside a terrarium globe on a candle-lit desk.">
+<meta name="theme-color" content="#1a100c">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Ccircle cx='16' cy='16' r='13' fill='%2341763a' stroke='%23c9a45a' stroke-width='3'/%3E%3Ccircle cx='16' cy='16' r='3' fill='%23ffd27a'/%3E%3C/svg%3E">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,600&family=Kalam&family=Alegreya+Sans:wght@400;500&display=swap" rel="stylesheet">
-<style>
-  :root { --ink: #23170f; --paper: #c4a878; --wood: #2a1712; --brass: #c9a45a; }
-  * { box-sizing: border-box; }
-  body {
-    margin: 0; min-height: 100vh; color: #e9d8b0; font: 17px/1.5 'Alegreya Sans', system-ui, sans-serif;
-    background: radial-gradient(circle at 80% 0%, #4a2e22 0, var(--wood) 45%, #0f0a0c 100%) fixed;
-  }
-  main { max-width: 1180px; margin: 0 auto; padding: 48px 24px 80px; }
-  .packet {
-    display: inline-block; background: var(--paper) url(docs/design/cards/paper.svg); background-blend-mode: multiply;
-    color: var(--ink); padding: 18px 24px 16px; transform: rotate(-1.2deg); border-top: 3px dashed #9e3426;
-    box-shadow: 0 2px 0 #7a6040, 0 4px 0 #3a2a18, 0 16px 24px rgba(0,0,0,.6);
-  }
-  h1 { font: 400 52px/1 Fraunces, Georgia, serif; margin: 0; }
-  .hand { font-family: Kalam, cursive; color: #5a3e26; font-size: 18px; }
-  p.lead { max-width: 62ch; font-size: 19px; margin: 32px 0 40px; }
-  .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(340px, 1fr)); gap: 32px; }
-  figure { margin: 0; }
-  figure img { display: block; width: 100%; height: auto; border-radius: 4px; box-shadow: 0 14px 30px rgba(0,0,0,.6); }
-  figcaption { margin-top: 10px; }
-  figcaption b { font: 400 22px Fraunces, Georgia, serif; color: #f0cf8a; display: block; }
-  .wide { grid-column: 1 / -1; }
-  a { color: #f0cf8a; }
-  a:focus-visible { outline: 2px solid var(--brass); outline-offset: 3px; }
-  footer { margin-top: 56px; color: #b9a483; }
-</style>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,600&family=Kalam:wght@400;700&family=Alegreya+Sans:wght@400;500;700&display=swap" rel="stylesheet">
+<link rel="preload" href="assets/watch-base.webp" as="image">
+<link rel="stylesheet" href="css/glasswood.css">
 </head>
 <body>
-<main>
-  <div class="packet">
-    <h1>Glasswood</h1>
-    <div class="hand">a village in a globe, a forest under glass</div>
-  </div>
-  <p class="lead">A cosy tower defence inside a terrarium globe on a candle-lit desk. The game is being rebuilt in 2D; these are its first designs. The full plan is in <a href="https://github.com/MyCresta/asterwake/blob/main/docs/plan.md">the repository</a>.</p>
-  <div class="grid">
-    <figure><a href="docs/design/scenes/wilds.svg"><img src="docs/design/scenes/wilds.jpg" alt="The globe on its stand, with a miniature world of meadows, forests, a river and mountain ranges inside" width="1200" height="750"></a>
-      <figcaption><b>Wilds</b>The whole world inside the globe, where expeditions go.</figcaption></figure>
-    <figure><a href="docs/design/scenes/watch.svg"><img src="docs/design/scenes/watch.jpg" alt="A brass reading glass over the forest around the village, showing a web of paths and a long detour forced by barricades" width="1200" height="750"></a>
-      <figcaption><b>Watch</b>Block forest paths and send the goblins the long way round.</figcaption></figure>
-    <figure><a href="docs/design/scenes/watch-night.svg"><img src="docs/design/scenes/watch-night.jpg" alt="The same view at night, with goblins and wolves walking the detour" width="1200" height="750"></a>
-      <figcaption><b>Night</b>The village fights on its own; you watch and pull creature cards.</figcaption></figure>
-    <figure><a href="docs/design/scenes/hearth.svg"><img src="docs/design/scenes/hearth.jpg" alt="A tilted loupe over the mossy village with a raised terrace, stairs, a mill, a tavern and the great tower" width="1200" height="750"></a>
-      <figcaption><b>Hearth</b>The village up close: old wood, moss and warm windows.</figcaption></figure>
-    <figure class="wide"><img src="docs/design/cards/portraits.jpg" alt="Four card portraits: an archer drawing a bow, a bearded smith at the forge, a herbalist with a jar of fireflies, and a goblin with a lantern" width="1040" height="720">
-      <figcaption><b>The deck</b>Every villager and creature is a trading card.</figcaption></figure>
-  </div>
-  <footer>Earlier 3D version: the <a href="https://github.com/MyCresta/asterwake/tree/3d-prototype">3d-prototype</a> branch.</footer>
+<main id="app">
+  <h1 class="sr">Glasswood</h1>
+  <svg id="scene" role="img" aria-label="The reading glass over the forest around the village: forest paths, burrows at the edge, and the village in the middle"></svg>
+  <div id="left" class="col"></div>
+  <div id="right" class="col"></div>
+  <div id="news"></div>
+  <div id="overlay" hidden></div>
 </main>
+<noscript><p style="padding:2rem">Glasswood needs JavaScript to run.</p></noscript>
+<script type="module" src="js/main.js"></script>
 </body>
 </html>

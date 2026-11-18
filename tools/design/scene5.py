@@ -172,7 +172,7 @@ def wopen(x,z):
     for c in C.values(): d=min(d,min(dseg(x,z,c[i],c[i+1]) for i in range(2))-.42)
     return d
 LAKES=[(12,-3,1.8),(-18.5,9.5,1.6),(5,24.5,1.5)]
-def watch(s,cx,cy,clipr,night=False,battle=False):
+def watch(s,cx,cy,clipr,night=False,battle=False,game=False):
     T=lambda x,z:(cx+x*s,cy+z*s); r=random.Random(3); o=[]
     o.append(f'<clipPath id="wv{clipr}"><circle cx="{cx}" cy="{cy}" r="{clipr}"/></clipPath><g clip-path="url(#wv{clipr})"><circle cx="{cx}" cy="{cy}" r="{clipr}" fill="#2a1d1c"/>')
     for i in range(900):
@@ -206,17 +206,18 @@ def watch(s,cx,cy,clipr,night=False,battle=False):
     o.append(f'<circle cx="{cx}" cy="{cy}" r="50" fill="url(#eg)"/><circle cx="{cx}" cy="{cy}" r="10" fill="#b9b3aa" stroke="#2c2620" stroke-width="1.4"/><circle cx="{cx}" cy="{cy}" r="6.5" fill="#c4553b" stroke="#2c2620"/><circle cx="{cx}" cy="{cy}" r="2.2" fill="#ffe08a"/>')
     for k,(n,p) in enumerate(SP):
         X,Y=T(*p); act=k<2
-        if act: o.append(f'<circle cx="{X}" cy="{Y}" r="36" fill="url(#vg)"/>')
+        if act and not game: o.append(f'<circle cx="{X}" cy="{Y}" r="36" fill="url(#vg)"/>')
         o.append(f'<path d="M{X-16} {Y-5} q7 -11 16 -6 q11 -5 16 6" stroke="#4a2e1e" stroke-width="4.5" fill="none" stroke-linecap="round"/><ellipse cx="{X}" cy="{Y+2}" rx="10" ry="7" fill="#0d070a"/>')
-    for e in BLOCK:
+    for e in ([] if game else BLOCK):
         c=C[e]; X,Y=T(*c[1]); ang=math.degrees(math.atan2(c[2][1]-c[0][1],c[2][0]-c[0][0]))+90
         o.append(f'<g transform="translate({X:.1f} {Y:.1f}) rotate({ang:.0f}) scale(1.25)" filter="url(#lift)"><rect x="-13" y="-3.5" width="26" height="7" rx="2" fill="#a07a4e" stroke="#2a1d1c" stroke-width="1.2"/><path d="M-9 -9 L-3 9 M9 -9 L3 9" stroke="#5a3e22" stroke-width="3.5" stroke-linecap="round"/></g>')
     open_r,L0=route('s0'); long_r,L1=route('s0',BLOCK); west_r,_=route('s1',BLOCK)
-    if not battle:
+    if not battle and not game:
         o.append(f'<path d="{smooth(pts_of(open_r)[::4]+[(0,0)],T)}" fill="none" stroke="#e0603e" stroke-width="3" stroke-dasharray="3 7" stroke-linecap="round" opacity=".75"/>')
         o+=[f'<circle cx="{T(x,z)[0]:.1f}" cy="{T(x,z)[1]:.1f}" r="2.3" fill="#ffe08a"/>' for x,z,_ in S2.along(pts_of(long_r),[i/110 for i in range(110)])]
         o+=[f'<circle cx="{T(x,z)[0]:.1f}" cy="{T(x,z)[1]:.1f}" r="1.8" fill="#ffe08a" opacity=".7"/>' for x,z,_ in S2.along(pts_of(west_r),[i/70 for i in range(70)])]
-    if night: o.append(f'<circle cx="{cx}" cy="{cy}" r="{clipr}" fill="#1a1450" opacity=".3"/><circle cx="{cx}" cy="{cy}" r="60" fill="url(#eg)"/>')
+    if game: pass
+    elif night: o.append(f'<circle cx="{cx}" cy="{cy}" r="{clipr}" fill="#1a1450" opacity=".3"/><circle cx="{cx}" cy="{cy}" r="60" fill="url(#eg)"/>')
     else: o.append(f'<circle cx="{cx}" cy="{cy}" r="{clipr}" fill="url(#dusk2)"/>')
     if battle:
         o.append(f'<circle cx="{cx}" cy="{cy}" r="{8.5*s}" fill="none" stroke="#ffd27a" stroke-opacity=".5" stroke-width="1.5" stroke-dasharray="2 6" stroke-linecap="round"/>')
@@ -228,7 +229,7 @@ def watch(s,cx,cy,clipr,night=False,battle=False):
         for x,z,_,_ in ens:
             X,Y=T(x,z); a=math.atan2(Y-cy,X-cx)
             if math.hypot(X-cx,Y-cy)<8.5*s+10: o.append(f'<path d="M{cx+(X-cx)*.6:.1f} {cy+(Y-cy)*.6:.1f} l{math.cos(a)*12:.1f} {math.sin(a)*12:.1f}" stroke="#f3e2bf" stroke-width="2" stroke-linecap="round"/>')
-    o+= [f'<circle cx="{cx+r.uniform(-clipr,clipr):.0f}" cy="{cy+r.uniform(-clipr,clipr):.0f}" r="6" fill="url(#gl)"/>' for _ in range(22)]
+    if not game: o+= [f'<circle cx="{cx+r.uniform(-clipr,clipr):.0f}" cy="{cy+r.uniform(-clipr,clipr):.0f}" r="6" fill="url(#gl)"/>' for _ in range(22)]
     o.append('</g>'); return ''.join(o), (L0,L1)
 if __name__=='__main__':
     print(len(C), route('s0'), route('s0',BLOCK))

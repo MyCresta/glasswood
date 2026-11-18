@@ -25,3 +25,13 @@ python3 portraits.py
 ```
 
 `make5.py` and `make6.py` write into `tools/design/desk/` and `portraits.py` into `tools/design/art2/` (create both folders first). The drawing functions are the reference for the JavaScript SVG renderer.
+
+## Game assets
+
+The Watch view's static artwork comes from the same scripts:
+
+```
+cd tools/design
+python3 make_game_assets.py              # writes assets/watch-base.svg, assets/watch-glass.svg and js/render/defs.js
+cd ../.. && python3 tools/design/rasterize.py assets/watch-base.svg && rm assets/watch-base.svg
+```

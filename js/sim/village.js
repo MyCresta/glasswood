@@ -101,7 +101,7 @@ export function removeBarricade(state, key) {
 }
 
 export const OBJECTIVES = [
-  { id: 'select', title: 'Look around the village', guide: 'Select a building in the scene, or press Tab and Enter, to see what it does.', check: (s) => s.objectives.flags.selected },
+  { id: 'select', title: 'Look into the glass', guide: 'Click the paper tag of a burrow under the reading glass to see what lives there.', check: (s) => s.objectives.flags.selected },
   { id: 'night1', title: 'Survive the first night', guide: 'When the candle burns down, goblins come from the Hollow Gate in the north. The reading glass shows them on the forest paths, and the tower’s archers fight on their own.', check: (s) => s.best >= 1, reward: 20 },
   { id: 'archery2', title: 'Train the archers', guide: 'Select the Great Tower in the middle of the village and upgrade it. Each level adds 30% damage and a little range.', check: (s) => s.buildings.archery.level >= 2, reward: 30 },
   { id: 'walls2', title: 'Strengthen the walls', guide: 'Upgrade the Walls & Gate for more integrity and armour against every hit.', check: (s) => s.buildings.walls.level >= 2, reward: 30 },
