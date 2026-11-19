@@ -103,8 +103,8 @@ export function startNight(state, ev) {
   };
   const parts = Object.entries(pv.comp).filter(([, k]) => k > 0).map(([t, k]) => `${k} ${k === 1 ? ENEMIES[t].name : ENEMIES[t].plural}`);
   ev.emit('info', `Night ${n} falls: ${parts.join(' and ')}.`, { cat: 'dusk' });
-  if (pv.newSpawn) ev.emit('attention', `${pv.newSpawn.name} has opened. Enemies now come from ${pv.spawns.length} directions.`, { cat: 'spawn', spawn: pv.newSpawn.id });
-  if (pv.newEnemy) ev.emit('attention', `New enemy tonight: ${ENEMIES[pv.newEnemy].plural}. ${ENEMIES[pv.newEnemy].blurb}`, { cat: 'enemy' });
+  if (pv.newSpawn) ev.emit('attention', `${pv.newSpawn.name} opens`, { cat: 'spawn', spawn: pv.newSpawn.id });
+  if (pv.newEnemy) ev.emit('attention', `New: ${ENEMIES[pv.newEnemy].plural}`, { cat: 'enemy' });
   ev.sound?.('dusk');
 }
 
@@ -289,8 +289,7 @@ export function endNight(state, won, ev) {
     const record = n > state.best;
     state.best = Math.max(state.best, n);
     if (!state.hold) state.night = n + 1;
-    const flawless = b.wallDamage === 0 ? ' The walls were not even scratched.' : '';
-    ev.emit('done', `Night ${n} held. ${b.kills} enemies defeated${report.retreated ? `, ${report.retreated} fled at dawn` : ''}. +${b.gold + reward} gold.${flawless}${record && n > 1 ? ' A new best.' : ''}`, { cat: 'night', record });
+    ev.emit('done', `Night ${n} held. +${b.gold + reward} gold${record && n > 1 ? '. New best' : ''}`, { cat: 'night', record });
     ev.sound?.('dawn');
   } else {
     const lost = Math.floor(availableGold(state) * 0.1);
@@ -299,7 +298,7 @@ export function endNight(state, won, ev) {
     state.lastResult[n] = 'lost';
     state.stats.nightsLost += 1;
     state.night = Math.max(1, n - 2);
-    ev.emit('attention', `The walls fell on night ${n}. Raiders carried off ${lost} gold. The siege falls back to night ${state.night}.`, { cat: 'night' });
+    ev.emit('attention', `Walls fell. −${lost} gold. Back to night ${state.night}`, { cat: 'night' });
     ev.sound?.('fall');
   }
   state.lastReport = report;

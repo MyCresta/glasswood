@@ -73,7 +73,7 @@ export class HearthView {
 
   frame(dt, state, nightF, reduced) {
     this.t = (this.t || 0) + dt;
-    this.tint.setAttribute('opacity', (0.32 * nightF).toFixed(3));
+    this.tint.setAttribute('opacity', (0.1 * nightF).toFixed(3));
     if (!reduced) for (const m of this.marks.children) m.setAttribute('stroke-dashoffset', f1(-this.t * 12));
   }
 }

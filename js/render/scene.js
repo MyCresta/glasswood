@@ -15,20 +15,22 @@ export const GLOBE = { x: 640, y: 424, r: 350 };
 const V = [GLOBE.x, GLOBE.y];               // the village, in globe coordinates
 const R_WATCH = 10.4 / 2.95;                // the forest map is the globe at this magnification
 const R_HEARTH = R_WATCH * 8;               // and the village close-up roughly this much more
-const WIDE_CX = 660;                         // wide screens frame the desk here, whatever the view
 
 // Each glass: how big it sits on the desk (k), where its centre lands, where it
 // slides in from, and its content planes (finest last), each drawn at `mag` times
 // the globe with `anchor` being the village in that plane's own coordinates.
 const RIGS = {
-  watch: { k: 0.86, at: [622, 404], from: [300, 360], c: [LENS.x, LENS.y], mag: R_WATCH },
-  hearth: { k: 0.88, at: [646, 420], from: [-260, -420], c: [HEARTH.cx, HEARTH.cy], mag: R_HEARTH },
+  watch: { k: 0.94, at: [624, 406], from: [300, 360], c: [LENS.x, LENS.y], mag: R_WATCH },
+  hearth: { k: 0.95, at: [642, 420], from: [-260, -420], c: [HEARTH.cx, HEARTH.cy], mag: R_HEARTH },
 };
 const FRAME = {
   wilds: [GLOBE.x - 392, GLOBE.y - 392, 784, 800],
-  watch: [622 - 332, 404 - 332, 664, 680],
-  hearth: [646 - 395, 420 - 360, 790, 740],
+  watch: [624 - 352, 406 - 352, 704, 716],
+  hearth: [642 - 410, 420 - 385, 820, 780],
 };
+// Wide screens: the desk framed a little closer than the full artwork, so the
+// globe and its glasses sit large between the two columns of notes.
+const WIDE = [4, 32, 1312, 820];
 const ease = (t) => (t < 0 ? 0 : t > 1 ? 1 : t * t * (3 - 2 * t));
 const clamp01 = (t) => Math.max(0, Math.min(1, t));
 
@@ -171,7 +173,44 @@ export class Scene {
     };
     this.view = null;
     this.anim = null;
+    this.onStep = handlers.onStep;
     window.addEventListener('resize', () => this.fit());
+    this.zoomInput(stage);
+  }
+
+  // Scroll the mouse wheel (or pinch) over the desk to go Wilds, Watch, Hearth
+  // and back. Small trackpad scrolls add up; one step per gesture.
+  zoomInput(stage) {
+    let acc = 0, idle = 0, lock = 0;
+    const step = (dir) => {
+      const now = performance.now();
+      if (now < lock) return;
+      lock = now + 700;
+      this.onStep?.(dir);
+    };
+    stage.addEventListener('wheel', (e) => {
+      if (e.target.closest?.('#overlay')) return;
+      e.preventDefault();
+      const d = e.deltaMode === 1 ? e.deltaY * 16 : e.deltaY;
+      clearTimeout(idle);
+      idle = setTimeout(() => { acc = 0; }, 220);
+      acc += d;
+      if (Math.abs(acc) >= 60) { step(acc < 0 ? 1 : -1); acc = 0; }
+    }, { passive: false });
+    const pts = new Map();
+    let base = 0;
+    const dist = () => { const [a, b] = [...pts.values()]; return Math.hypot(a.x - b.x, a.y - b.y); };
+    stage.addEventListener('pointerdown', (e) => { if (e.pointerType !== 'touch') return; pts.set(e.pointerId, e); if (pts.size === 2) base = dist(); });
+    stage.addEventListener('pointermove', (e) => {
+      if (!pts.has(e.pointerId)) return;
+      pts.set(e.pointerId, e);
+      if (pts.size !== 2 || !base) return;
+      const r = dist() / base;
+      if (r > 1.3 || r < 0.77) { step(r > 1 ? 1 : -1); base = dist(); }
+    });
+    const up = (e) => { pts.delete(e.pointerId); base = 0; };
+    stage.addEventListener('pointerup', up);
+    stage.addEventListener('pointercancel', up);
   }
 
   // Bring the right glass over the globe and zoom through it.
@@ -254,12 +293,15 @@ export class Scene {
       }
       r.apply();
     }
-    if (t >= 1) this.anim = null;
+    if (t >= 1) {
+      for (const [k, r] of Object.entries(this.rigs)) { r.slide = a.plan[k].slide; r.zoom = a.plan[k].zoom; r.apply(); }
+      this.anim = null;
+    }
   }
 
   fit() {
     const narrow = window.matchMedia('(max-width: 820px), (max-aspect-ratio: 1/1)').matches;
-    const vb = (narrow ? FRAME[this.view || 'watch'] : [WIDE_CX - 720, 0, 1440, 900]).join(' ');
+    const vb = (narrow ? FRAME[this.view || 'watch'] : WIDE).join(' ');
     for (const el of this.svgs) el.setAttribute('viewBox', vb);
   }
 
@@ -270,10 +312,12 @@ export class Scene {
   frame(dt, state, alpha, nightF, reduced) {
     this.stepAnim(dt);
     const nk = Math.round(nightF * 50) / 50;
-    if (nk !== this.nightKey) {
-      this.nightKey = nk;
-      this.dark.setAttribute('opacity', (0.34 * nk).toFixed(3));
-      for (const r of Object.values(this.rigs)) r.frameSvg.style.filter = nk ? `brightness(${(1 - 0.3 * nk).toFixed(2)})` : '';
+    const key = `${nk}|${this.view}`;
+    if (key !== this.nightKey) {
+      this.nightKey = key;
+      // the village keeps its lanterns: the loupe darkens much less than the forest
+      this.dark.setAttribute('opacity', ((this.view === 'hearth' ? 0.14 : 0.3) * nk).toFixed(3));
+      for (const r of Object.values(this.rigs)) r.frameSvg.style.filter = nk ? `brightness(${(1 - 0.22 * nk).toFixed(2)})` : '';
     }
     // only what is visible needs its live layer every frame; the Watch keeps
     // consuming battle effects so sounds and bursts never pile up

@@ -33,17 +33,17 @@ export class WatchView {
     this.onSpawn = onSpawn;
     svgEl('image', { href: 'assets/watch.webp', x: 280, y: 60, width: 700, height: 700 }, root);
     this.live = svgEl('g', { 'clip-path': 'url(#lensclip)' }, root);
-    this.nightTint = svgEl('circle', { cx: LENS.x, cy: LENS.y, r: LENS.r, fill: '#1a1450', opacity: 0 }, this.live);
-    this.glows = svgEl('g', {}, this.live);
-    this.routes = svgEl('g', {}, this.live);
-    this.oldRoutes = svgEl('g', {}, this.live);
+    this.nightTint = svgEl('circle', { 'pointer-events': 'none', cx: LENS.x, cy: LENS.y, r: LENS.r, fill: '#1a1450', opacity: 0 }, this.live);
+    this.glows = svgEl('g', { 'pointer-events': 'none',}, this.live);
+    this.routes = svgEl('g', { 'pointer-events': 'none',}, this.live);
+    this.oldRoutes = svgEl('g', { 'pointer-events': 'none',}, this.live);
     this.edges = svgEl('g', {}, this.live);
-    this.barricades = svgEl('g', {}, this.live);
-    this.range = svgEl('circle', { cx: LENS.x, cy: LENS.y, r: 0, fill: 'none', stroke: '#ffd27a', 'stroke-opacity': 0.45, 'stroke-width': 1.5, 'stroke-dasharray': '2 6', 'stroke-linecap': 'round', opacity: 0 }, this.live);
-    this.creatures = svgEl('g', {}, this.live);
-    this.arrows = svgEl('g', {}, this.live);
-    this.fireflies = svgEl('g', {}, this.live);
-    this.puffLayer = svgEl('g', {}, this.live);
+    this.barricades = svgEl('g', { 'pointer-events': 'none',}, this.live);
+    this.range = svgEl('circle', { cx: LENS.x, cy: LENS.y, r: 0, fill: 'none', stroke: '#ffd27a', 'stroke-opacity': 0.45, 'stroke-width': 1.5, 'stroke-dasharray': '2 6', 'stroke-linecap': 'round', opacity: 0, 'pointer-events': 'none' }, this.live);
+    this.creatures = svgEl('g', { 'pointer-events': 'none',}, this.live);
+    this.arrows = svgEl('g', { 'pointer-events': 'none',}, this.live);
+    this.fireflies = svgEl('g', { 'pointer-events': 'none',}, this.live);
+    this.puffLayer = svgEl('g', { 'pointer-events': 'none',}, this.live);
     this.tags = svgEl('g', {}, root);
     this.sprites = new Map();
     this.arrowEls = new Map();
@@ -64,7 +64,7 @@ export class WatchView {
       hit.addEventListener('pointerenter', () => { hint.setAttribute('opacity', 1); this.onEdgeHover?.(e.key); });
       hit.addEventListener('pointerleave', () => { hint.setAttribute('opacity', 0); this.onEdgeHover?.(null); });
       const title = svgEl('title', {}, hit);
-      title.textContent = 'Click to place or take up a barricade here';
+      title.textContent = 'Block or open this path';
     }
   }
 

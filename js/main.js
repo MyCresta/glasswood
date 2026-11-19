@@ -205,8 +205,9 @@ function begin(state, fresh) {
       const sp = SPAWNS.find((x) => x.id === id);
       const n = game.state.battle ? game.state.battle.n : game.state.night;
       game.act((st) => { st.objectives.flags.selected = true; return { ok: true }; });
-      game.desk.say('done', `${sp.name}: ${sp.blurb} ${sp.opens <= n ? 'Open.' : `Opens on night ${sp.opens}.`}`);
+      game.desk.say('done', `${sp.name}: ${sp.opens <= n ? 'open' : `opens night ${sp.opens}`}`);
     },
+    onStep: (dir) => { const order = ['wilds', 'watch', 'hearth']; const i = order.indexOf(game.state.ui.view) + dir; if (i >= 0 && i < order.length) game.setView(order[i]); },
     onPlace: (id) => { game.state.ui.place = id; game.view.views.wilds.select(id); game.act((st) => { st.objectives.flags.selected = true; return { ok: true }; }); },
     onBuilding: (id) => { game.state.ui.building = id; game.view.views.hearth.select(id); game.act((st) => { st.objectives.flags.selected = true; return { ok: true }; }); },
   });
@@ -244,7 +245,7 @@ function startGame() {
       game.state.lastTick = Date.now();
       close();
       game.act(() => ({ ok: true }));
-      game.desk.say('done', `${game.state.village.name} lights its lanterns. The first night comes when the candle burns down.`);
+      game.desk.say('done', `${game.state.village.name} lights its lanterns`);
     };
     input.addEventListener('keydown', (e) => { if (e.key === 'Enter') go(); });
     body.append(h('div.stack', {},

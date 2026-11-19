@@ -66,7 +66,7 @@ export function advanceQueue(state, dt, ev) {
     b.level = q.toLevel;
     if (q.bid === 'walls' && state.phase === 'night') state.integrity += wallStats(b.level).integrity - before;
     else if (q.bid === 'walls') state.integrity = wallStats(b.level).integrity;
-    ev?.emit('done', `${BUILDINGS[q.bid].name} reached level ${b.level}.`, { cat: 'upgrade', building: q.bid });
+    ev?.emit('done', `${BUILDINGS[q.bid].name}: level ${b.level}`, { cat: 'upgrade', building: q.bid });
     ev?.sound?.('upgrade');
     if (ev) ev.changed = true;
   }
@@ -108,7 +108,7 @@ export const OBJECTIVES = [
   { id: 'townhall2', title: 'Grow the Town Hall', guide: 'Buildings can reach twice the Town Hall’s level. Raise it to level 2 to keep improving.', check: (s) => s.buildings.townhall.level >= 2, reward: 60 },
   { id: 'night5', title: 'Hold until night 5', guide: 'On night 5 the Mossy Cave in the west opens and enemies come from two sides.', check: (s) => s.best >= 5, reward: 60 },
   { id: 'night10', title: 'Hold until night 10', guide: 'Keep raising the archers and walls. Use Hold to repeat a night you can win while you save up.', check: (s) => s.best >= 10, reward: 120 },
-  { id: 'barricade', title: 'Block a forest path', guide: 'Drag a barricade from its note onto a path under the glass. The goblins must take the long way round, past more of the archers.', check: (s) => s.objectives.flags.barricade, reward: 20 },
+  { id: 'barricade', title: 'Block a forest path', guide: 'Click a path under the reading glass. The creatures must take the long way round, past more of the archers.', check: (s) => s.objectives.flags.barricade, reward: 20 },
 ];
 
 export function checkObjectives(state, ev) {
@@ -119,7 +119,7 @@ export function checkObjectives(state, ev) {
       state.gold += o.reward;
       state.stats.goldEarned += o.reward;
     }
-    ev?.emit('done', `Objective complete: ${o.title}.${o.reward ? ` +${o.reward} gold.` : ''}`, { cat: 'objective' });
+    ev?.emit('done', `Done: ${o.title}${o.reward ? `. +${o.reward} gold` : ''}`, { cat: 'objective' });
     if (ev) ev.changed = true;
   }
 }

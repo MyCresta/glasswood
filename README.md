@@ -14,7 +14,7 @@ The interface is the desk: worn notes, a leather index card, wax seals and a dec
 
 ## Status
 
-Milestone 1 is under way. All three views work: the Watch is playable (train the tower, mend the walls, block forest paths with up to three barricades and watch goblins and wolves walk the long way round), the Wilds shows the places in the globe, and Hearth lets you look over the village and its buildings. Keys 1, 2 and 3 switch views; Settings (O) has sound, motion and save options. Expeditions, villager cards and restoring buildings come in later milestones.
+Milestone 1 is under way. All three views work: the Watch is playable (train the tower, mend the walls, block forest paths with up to three barricades and watch goblins and wolves walk the long way round), the Wilds shows the places in the globe, and Hearth lets you look over the village and its buildings. Scroll the mouse wheel (or pinch, or press 1, 2 and 3) to move between views; Settings (O) has sound, motion and save options. Expeditions, villager cards and restoring buildings come in later milestones.
 
 Play at https://mycresta.github.io/glasswood/. Keys: N calls the night, X switches night speed, Space pauses.
 
