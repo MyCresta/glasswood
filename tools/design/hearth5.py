@@ -61,13 +61,9 @@ DEFS = '''
 '''
 
 # ---------- where things stand (village units; the tower is the centre) ----------
-SPOTS = {
-    'archery': (0, 0), 'townhall': (-1.62, -1.48), 'tavern': (1.55, -1.75),
-    'workshop': (2.3, -0.55), 'lumber': (-2.3, 1.45), 'quarry': (1.85, 1.85), 'walls': (0, 3.2),
-}
+SPOTS = {'archery': (0, 0), 'shrine': (-1.62, -1.48), 'workshop': (2.0, -0.9), 'walls': (0, 3.2)}
 # the crop box of each building's sprite, around its foot: half-width, height above, depth below
-BOX = {'archery': (70, 230, 24), 'townhall': (80, 170, 24), 'tavern': (70, 150, 24), 'workshop': (64, 120, 24),
-       'lumber': (70, 110, 24), 'quarry': (70, 100, 30)}
+BOX = {'archery': (70, 230, 24), 'shrine': (80, 150, 26), 'workshop': (64, 120, 24)}
 
 LANES = [((0, 3), (-.4, 6.4)), ((.7, -3), (.2, -6.4)), ((-3, .3), (-5.4, .8)), ((3.8, -.1), (5.4, .4))]
 
@@ -214,7 +210,30 @@ def lumber(stage, X, Y):
         o += f'<path d="M{X+30} {Y} l10 -18 l10 18 M{X+28} {Y-12} h26" stroke="#6b4a2e" stroke-width="3" fill="none"/>' + glowdot(X + 36, Y - 40, '#ffd27a', 18, 3)
     return o
 
+def shrine(stage, X, Y):
+    """Standing stones on the terrace: toppled, raised, then an arch with glowing runes."""
+    r = random.Random(17); o = ao(X, Y, 64)
+    ring = [(math.cos(a) * 46, math.sin(a) * 20) for a in [k * math.tau / 7 + .3 for k in range(7)]]
+    ring.sort(key=lambda p: p[1])
+    if stage == 0:
+        for dx, dz in ring:
+            o += f'<ellipse cx="{X+dx:.0f}" cy="{Y+dz:.0f}" rx="13" ry="6" fill="#8a8478" stroke="#2a2622" stroke-width="1.2" transform="rotate({r.uniform(-30,30):.0f} {X+dx:.0f} {Y+dz:.0f})"/><circle cx="{X+dx+r.uniform(-6,6):.0f}" cy="{Y+dz-3:.0f}" r="6" fill="#46703a"/>'
+        return o + vine(X - 10, Y - 6, 22, seed=40)
+    glow = '#9ff6ff' if stage == 1 else '#c39bff'
+    o += f'<ellipse cx="{X}" cy="{Y}" rx="56" ry="24" fill="url(#{"cy" if stage == 1 else "vg"})" opacity=".8"/>'
+    o += f'<ellipse cx="{X}" cy="{Y}" rx="20" ry="8" fill="#5e5950" stroke="#2a2622"/><ellipse cx="{X}" cy="{Y-2}" rx="14" ry="5" fill="{glow}" opacity=".7"/>'
+    for dx, dz in ring:
+        h = r.uniform(30, 40) * (1.15 if stage == 2 else 1)
+        x0, y0 = X + dx, Y + dz
+        o += f'<path d="M{x0-6:.0f} {y0:.0f} L{x0-5:.0f} {y0-h:.0f} Q{x0:.0f} {y0-h-5:.0f} {x0+5:.0f} {y0-h:.0f} L{x0+6:.0f} {y0:.0f}Z" fill="#8a8478" stroke="#2a2622" stroke-width="1.2"/><path d="M{x0-6:.0f} {y0:.0f} L{x0-5:.0f} {y0-h:.0f} L{x0-1:.0f} {y0-h-2:.0f} L{x0-1:.0f} {y0:.0f}Z" fill="#6a655c"/>'
+        o += f'<path d="M{x0:.0f} {y0-h*.7:.0f} l2 4 -2 4 -2 -4z" fill="{glow}" opacity=".9"/>'
+    if stage == 2:  # a capstone arch behind, and wisps
+        o = o.replace('<ellipse cx="' + str(X), '<path d="M' + f'{X-26} {Y-6} V{Y-64} M{X+26} {Y-6} V{Y-64}" stroke="#8a8478" stroke-width="12"/><rect x="{X-36}" y="{Y-74}" width="72" height="12" fill="#8a8478" stroke="#2a2622"/><path d="M{X-30} {Y-68} h60" stroke="{glow}" stroke-width="2" opacity=".8"/><ellipse cx="' + str(X), 1)
+        o += ''.join(glowdot(X + dx, Y + dy, glow, 14, 2.5) for dx, dy in [(-30, -50), (24, -60), (4, -84), (40, -30)])
+    return o
+
 def building(bid, stage, X, Y):
+    if bid == 'shrine': return shrine(stage, X, Y)
     if bid == 'archery': return tower(stage, X, Y)
     if bid == 'townhall': return ao(X, Y, 60) + (ruin2(X, Y, 92, seed=3) if stage == 0 else townhall(X, Y, 80 if stage == 1 else 94) + (f'<path d="M{X+30} {Y-150} v-30 l18 6 -18 6" fill="#9e3426" stroke="#21150c"/>' if stage == 2 else ''))
     if bid == 'tavern': return ao(X, Y, 56) + (ruin2(X, Y, 82, seed=5) if stage == 0 else tavern(X, Y, 72 if stage == 1 else 86) + (glowdot(X - 50, Y - 10, '#ffd27a', 22, 3) + f'<rect x="{X-62}" y="{Y-14}" width="22" height="4" fill="#6b4a2e"/>' if stage == 2 else ''))

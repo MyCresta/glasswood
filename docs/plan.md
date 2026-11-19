@@ -120,8 +120,12 @@ No build step, static files on GitHub Pages. The simulation is deterministic and
 5. **Expeditions and relics** in the Wilds.
 6. **The desk of unlocks**, new glasses and head starts.
 
-## 13. Open decisions
+## 13. Decided
 
-- Whether spells are cast by clicking a spot on the glass or fire on their own when ready (clicking is more fun; automatic suits idle hands).
-- How many defender posts the tower starts with (three feels right).
-- Whether a run can be saved mid-night or only between nights.
+- **Spells:** both kinds. Active spells are cast during the night (Q W E R or their buttons, then a click on the glass; Mend Walls works at once). Passive spells work on their own.
+- **The tower** always shoots on its own. Defenders are extra shooters on top, with no fixed number of posts: how many you end up with depends on what the draft deals.
+- **Saving:** the run is saved between nights. Leaving during a night starts that night again from its beginning when you come back (gold earned in it is undone). Time away is never played.
+
+## 14. Status
+
+Milestone 1 and a first draft (milestone 2) are in: runs, camp with no clock, endless nights, 22 cards in five families with tags, rarity, synergies and rerolls, active and passive spells, the run-over card and Embers, and Hearth with the Great Tower, Walls, Workshop and Shrine growing with the cards. A simulated player that picks sensibly and casts spells when ready ends runs between nights 23 and 38 (median 27).

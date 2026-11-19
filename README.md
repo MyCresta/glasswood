@@ -14,7 +14,7 @@ The interface is the desk: worn notes, a leather index card, wax seals and a dec
 
 ## Status
 
-Milestone 1 is under way. All three views work: the Watch is playable (train the tower, mend the walls, block forest paths with up to three barricades and watch goblins and wolves walk the long way round), the Wilds shows the places in the globe, and Hearth lets you look over the village and its buildings. Scroll the mouse wheel (or pinch, or press 1, 2 and 3) to move between views; Settings (O) has sound, motion and save options. Expeditions, villager cards and restoring buildings come in later milestones.
+Glasswood is an endless roguelike: every run is a new globe. Hold as many nights as you can; after each one, choose one of three cards (defenders for the tower, spells, toolkit, fortify, tower upgrades). Block forest paths with barricades between nights, cast spells during them (Q W E R, then click the glass). When the walls fall the run ends and its Embers are kept. Scroll or press 1, 2 and 3 to move between the Wilds, the Watch and Hearth. See docs/plan.md.
 
 Play at https://mycresta.github.io/glasswood/. Keys: N calls the night, X switches night speed, Space pauses.
 

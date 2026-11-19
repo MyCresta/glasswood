@@ -1,10 +1,9 @@
-// Advancing time: the fixed-step tick, the live pump and offline catch-up.
-import { STEP, OFFLINE_CAP, OFFLINE_CYCLE, OFFLINE_REWARD, DAY_LENGTH, wallStats } from '../data/village.js';
-import { startNight, stepNight, safeNight, waveGold, dawnReward } from './battle.js';
-import { advanceQueue, checkObjectives, produce, villagerArrives } from './village.js';
+// Time: fixed steps for the nights. Between nights (camp, the draft) nothing
+// runs on a clock: the next night starts when the player calls it.
+import { STEP } from '../data/village.js';
+import { startNight, stepNight } from './battle.js';
 
-const LOG_MAX = 300;
-export const AWAY_GAP = 90; // seconds; longer gaps are treated as time away
+export const LOG_MAX = 60;
 
 export function makeEvents(state, sound) {
   return {
@@ -23,13 +22,7 @@ export function makeEvents(state, sound) {
 export function tick(state, dt, ev) {
   if (state.paused) return;
   state.time += dt;
-  advanceQueue(state, dt, ev);
-  produce(state, dt);
-  if (state.phase === 'day') {
-    state.phaseT += dt;
-    if (state.phaseT >= state.dayLength) startNight(state, ev);
-  } else stepNight(state, dt, ev);
-  checkObjectives(state, ev);
+  if (state.phase === 'night') stepNight(state, dt, ev);
 }
 
 export function advance(state, seconds, ev) {
@@ -42,7 +35,9 @@ export function advance(state, seconds, ev) {
 }
 
 export function callNight(state, ev) {
-  if (state.phase !== 'day') return { ok: false, reason: 'It is already night.' };
+  if (state.phase === 'night') return { ok: false, reason: 'It is already night.' };
+  if (state.phase === 'draft') return { ok: false, reason: 'Choose a card first.' };
+  if (state.phase === 'over') return { ok: false, reason: 'This run is over.' };
   startNight(state, ev);
   return { ok: true };
 }
@@ -50,7 +45,9 @@ export function callNight(state, ev) {
 // Live play: consume real time in fixed steps.
 // `carry` holds unspent real milliseconds between calls (kept out of the save).
 export function pump(state, now, carry, ev) {
-  let budget = carry.ms + Math.max(0, now - state.lastTick);
+  // time away is not played: a long gap (a hidden tab, a closed laptop) only
+  // moves the night on by a moment
+  let budget = carry.ms + Math.min(250, Math.max(0, now - state.lastTick));
   state.lastTick = now;
   if (state.paused) { carry.ms = 0; return; }
   let guard = 0;
@@ -62,46 +59,4 @@ export function pump(state, now, carry, ev) {
   }
   carry.ms = Math.min(budget, 1000);
   carry.alpha = budget / (STEP * 1000);
-}
-
-// Time away: upgrades continue; nights are defended at the safe night for
-// reduced rewards. Away time never loses a night or advances the siege.
-export function catchUp(state, now, ev) {
-  const elapsed = Math.max(0, (now - state.lastTick) / 1000);
-  state.lastTick = now;
-  const res = { elapsed, credited: 0, nights: 0, safe: 0, gold: 0, interrupted: false };
-  if (state.paused) return res;
-  const credited = Math.min(elapsed, OFFLINE_CAP);
-  res.credited = credited;
-  if (state.phase === 'night') {
-    res.interrupted = state.battle?.n || true;
-    state.battle = null;
-  }
-  state.time += credited;
-  const before = { timber: state.timber, stone: state.stone };
-  advanceQueue(state, credited, ev);
-  produce(state, credited);
-  res.timber = Math.floor(state.timber - before.timber);
-  res.stone = Math.floor(state.stone - before.stone);
-  const safe = safeNight(state);
-  res.safe = safe;
-  if (safe > 0) {
-    const nights = Math.floor(credited / OFFLINE_CYCLE);
-    const per = OFFLINE_REWARD * (waveGold(safe) + dawnReward(safe));
-    const g = Math.floor(nights * per);
-    state.gold += g;
-    state.stats.goldEarned += g;
-    state.stats.offlineNights += nights;
-    res.nights = nights;
-    res.gold = g;
-    res.arrived = 0;
-    for (let k = 0; k < nights && villagerArrives(state, null); k++) res.arrived += 1;
-  }
-  state.phase = 'day';
-  state.phaseT = 0;
-  state.dayLength = DAY_LENGTH;
-  state.integrity = wallStats(state.buildings.walls.level).integrity;
-  checkObjectives(state, ev);
-  ev.changed = true;
-  return res;
 }

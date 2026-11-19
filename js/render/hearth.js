@@ -3,16 +3,14 @@
 // (ruin, restored, grown), the villagers at their posts, and the trees in front.
 import { svgEl, f1 } from './watch.js';
 import { HOTSPOTS, HEARTH, SPRITES, FEET, VILLAGERS } from '../data/hotspots.js';
-import { BUILDINGS, stage } from '../data/village.js';
+import { BUILDINGS } from '../data/village.js';
+import { build, buildingStage } from '../sim/build.js';
+import { CARD, FAMILIES } from '../data/cards.js';
 
 const FULL = { x: 236, y: 56, width: 800, height: 748 };
-// where workers stand around a building, relative to its foot
-const POSTS = {
-  archery: [[-10, 0], [10, 0], [-22, 2], [22, 2]], // on the tower: raised by the tower's height below
-  lumber: [[44, 8], [-48, 10], [30, 22]],
-  quarry: [[-40, 18], [36, 22], [0, 30]],
-};
-const IDLE = [[66, 40], [-70, 46], [96, 18], [-96, 22], [40, 64], [-44, 70], [110, 52], [-112, 56], [10, 78], [-20, 84]];
+// defenders stand on the tower, in two rows when there are many
+const POSTS = [[-12, 0], [12, 0], [-28, 4], [28, 4], [0, 6], [-40, 10], [40, 10], [-20, 14], [20, 14], [0, 18]];
+const COLORS = { archer: 0, axe: 1, hunter: 6, crossbow: 2, mage: 3, witch: 5 };
 
 export class HearthView {
   constructor(root, { onBuilding } = {}) {
@@ -59,67 +57,55 @@ export class HearthView {
 
   sync(state) {
     // each building at the stage its level calls for
+    const b = build(state);
     for (const id of this.order) {
       const s = this.sprites[id];
-      const st = stage(id, state.buildings[id].level);
+      const st = buildingStage(b, id);
       if (st !== s.stage) { s.stage = st; s.img.setAttribute('href', `assets/b-${id}-${st}.webp`); }
     }
-    const ws = stage('walls', state.buildings.walls.level);
+    const ws = buildingStage(b, 'walls');
     if (ws !== this.wallStage) { this.wallStage = ws; this.walls.setAttribute('href', `assets/walls-${ws}.webp`); }
     this.syncPeople(state);
     this.syncTags(state);
   }
 
-  // the villagers stand where they work: on the tower, at the camp, in the quarry,
-  // and the idle ones around the square
+  // every defender card is a figure on the tower
   syncPeople(state) {
-    const key = state.villagers.map((v) => v.job).join(',');
+    const defs = state.cards.filter((id) => CARD[id]?.family === 'defender');
+    const st = buildingStage(build(state), 'archery');
+    const key = `${defs.join(',')}|${st}`;
     if (key === this.peopleKey) return;
     this.peopleKey = key;
     this.people.replaceChildren();
-    const count = {};
-    let idle = 0;
-    const spots = [];
-    state.villagers.forEach((v, i) => {
-      let x, y;
-      if (POSTS[v.job]) {
-        const k = (count[v.job] = (count[v.job] || 0) + 1) - 1;
-        const [dx, dy] = POSTS[v.job][k % POSTS[v.job].length];
-        [x, y] = [FEET[v.job][0] + dx, FEET[v.job][1] + dy];
-        if (v.job === 'archery') y -= [62, 78, 100][stage('archery', state.buildings.archery.level)];
-      } else {
-        const [dx, dy] = IDLE[idle++ % IDLE.length];
-        [x, y] = [FEET.archery[0] + dx, FEET.archery[1] + dy];
-      }
-      spots.push([y, x, i]);
+    const [fx, fy] = FEET.archery;
+    const lift = [62, 78, 100][st];
+    defs.slice(0, POSTS.length).map((id, i) => [id, POSTS[i]]).sort((a, b) => a[1][1] - b[1][1]).forEach(([id, [dx, dy]]) => {
+      const g = svgEl('g', { transform: `translate(${f1(fx + dx)} ${f1(fy - lift + dy)})` }, this.people);
+      g.innerHTML = VILLAGERS[COLORS[id] ?? 0];
+      svgEl('title', {}, g).textContent = CARD[id].name;
     });
-    spots.sort((a, b) => a[0] - b[0]);
-    for (const [y, x, i] of spots) {
-      const g = svgEl('g', { transform: `translate(${f1(x)} ${f1(y)})` }, this.people);
-      g.innerHTML = VILLAGERS[i % VILLAGERS.length];
-      const t = svgEl('title', {}, g);
-      t.textContent = `${state.villagers[i].name}${state.villagers[i].job === 'idle' ? ', resting' : ''}`;
-    }
   }
 
   // a small paper tag at the foot of each building: its level, or that it is a ruin
   syncTags(state) {
-    const key = Object.keys(HOTSPOTS).map((id) => `${id}${state.buildings[id]?.level ?? 0}`).join('|');
+    const counts = build(state).counts;
+    const num = (id) => BUILDINGS[id].families.reduce((a, f) => a + counts[f], 0);
+    const key = Object.keys(HOTSPOTS).map((id) => `${id}${num(id)}`).join('|');
     if (key === this.tagKey) return;
     this.tagKey = key;
     this.tags.replaceChildren();
     for (const [id, spots] of Object.entries(HOTSPOTS)) {
       const [x, y] = spots[0];
       const name = BUILDINGS[id]?.name || id;
-      const lv = state.buildings[id]?.level ?? 0;
-      const ruin = lv === 0;
+      const lv = num(id);
+      const ruin = false;
       const w = name.length * 7.6 + 46;
       const g = svgEl('g', { transform: `translate(${f1(x)} ${f1(y + 10)}) rotate(${id.length % 2 ? -1.5 : 1.5})`, opacity: ruin ? 0.85 : 1 }, this.tags);
       svgEl('rect', { x: -w / 2 + 1.5, y: 2, width: w, height: 22, fill: '#000', opacity: 0.35 }, g);
       svgEl('rect', { x: -w / 2, y: 0, width: w, height: 22, fill: ruin ? '#a99470' : '#d9bf8c', stroke: '#5a4428', 'stroke-width': 0.8 }, g);
       svgEl('circle', { cx: -w / 2 + 13, cy: 11, r: 8.5, fill: ruin ? '#6a5a44' : '#9e3426', stroke: ruin ? '#3a2e20' : '#5c1520' }, g);
       const n = svgEl('text', { x: -w / 2 + 13, y: 15, 'text-anchor': 'middle', 'font-family': 'Fraunces, Georgia, serif', 'font-size': 11.5, 'font-weight': 600, fill: '#f6e2c0' }, g);
-      n.textContent = ruin ? '–' : lv;
+      n.textContent = lv;
       const t = svgEl('text', { x: -w / 2 + 27, y: 16, 'font-family': 'Kalam, cursive', 'font-size': 14, fill: '#23170f' }, g);
       t.textContent = name;
     }

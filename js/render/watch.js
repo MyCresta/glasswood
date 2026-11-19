@@ -2,7 +2,8 @@
 // the glass is pre-drawn (assets/); this module draws everything that changes:
 // burrow glows and tags, tonight's routes, barricades, creatures and arrows.
 import { NODES } from '../data/web.js';
-import { SPAWNS, ENEMIES, archeryStats } from '../data/village.js';
+import { SPAWNS, ENEMIES } from '../data/village.js';
+import { build } from '../sim/build.js';
 import { WEB, EDGE, routeForSpawn, edgeKey } from '../sim/web.js';
 import { activeSpawns } from '../sim/battle.js';
 
@@ -24,10 +25,21 @@ function pathD(pts) {
   return pts.map(([x, z], i) => { const [X, Y] = T(x, z); return `${i ? 'L' : 'M'}${f1(X)} ${f1(Y)}`; }).join(' ');
 }
 
+// spell effects: ring colour and how long it lasts
+const RING = { firebolt: ['#ff8a3a', 0.7], snare: ['#7fd66a', 1.2], splash: ['#ffb35a', 0.35] };
+
 export class WatchView {
-  constructor(root, { onEdge, onEdgeHover, onSpawn, onFx } = {}) {
+  constructor(root, { onEdge, onEdgeHover, onSpawn, onFx, onGlass } = {}) {
     this.root = root;
     this.onFx = onFx;
+    // a click anywhere on the glass, in forest units (used to cast spells)
+    root.addEventListener('click', (e) => {
+      if (!onGlass) return;
+      const m = root.getScreenCTM();
+      if (!m) return;
+      const p = new DOMPoint(e.clientX, e.clientY).matrixTransform(m.inverse());
+      onGlass((p.x - LENS.x) / S, (p.y - LENS.y) / S, e);
+    });
     this.onEdge = onEdge;
     this.onEdgeHover = onEdgeHover;
     this.onSpawn = onSpawn;
@@ -43,6 +55,7 @@ export class WatchView {
     this.creatures = svgEl('g', { 'pointer-events': 'none',}, this.live);
     this.arrows = svgEl('g', { 'pointer-events': 'none',}, this.live);
     this.fireflies = svgEl('g', { 'pointer-events': 'none',}, this.live);
+    this.ringLayer = svgEl('g', { 'pointer-events': 'none' }, this.live);
     this.puffLayer = svgEl('g', { 'pointer-events': 'none',}, this.live);
     this.tags = svgEl('g', {}, root);
     this.sprites = new Map();
@@ -90,8 +103,7 @@ export class WatchView {
       this.drawBarricades(state.barricades, preview);
       this.drawRoutes(state, open, preview);
     }
-    const st = archeryStats(state.buildings.archery.level);
-    this.range.setAttribute('r', st.range * S);
+    this.range.setAttribute('r', Math.max(...build(state).shooters.map((x) => x.range)) * S);
   }
 
   drawGlowsAndTags(open, n) {
@@ -199,6 +211,7 @@ export class WatchView {
   // Little bursts: gold rising where a creature fell, splinters where walls were hit.
   drawFx(b, dt) {
     this.puffs ||= [];
+    this.ringFx ||= [];
     if (b) {
       if (this.fxNight !== b.n) { this.fxNight = b.n; this.seenFx = 0; }
       for (const f of b.fx) {
@@ -209,9 +222,23 @@ export class WatchView {
         if (f.kind === 'death') for (let i = 0; i < 4; i++) this.puffs.push({ x: X + (Math.random() - 0.5) * 10, y: Y - 8, vx: (Math.random() - 0.5) * 20, vy: -30 - Math.random() * 20, life: 1.1, c: '#ffd27a', r: 2.6 });
         else if (f.kind === 'wall') for (let i = 0; i < 3; i++) this.puffs.push({ x: X, y: Y - 4, vx: (Math.random() - 0.5) * 40, vy: -20 - Math.random() * 20, life: 0.5, c: '#a07a4e', r: 2 });
         else if (f.kind === 'hit') this.puffs.push({ x: X, y: Y - 10, vx: 0, vy: -10, life: 0.25, c: '#f3e2bf', r: 3 });
+        else if (RING[f.kind]) {
+          const [c, life] = RING[f.kind];
+          this.ringFx.push({ x: X, y: Y, r: (f.r || 1) * S, c, life, max: life });
+          for (let i = 0; i < 8; i++) this.puffs.push({ x: X + (Math.random() - 0.5) * (f.r || 1) * S, y: Y + (Math.random() - 0.5) * (f.r || 1) * S * 0.6, vx: (Math.random() - 0.5) * 30, vy: -30 - Math.random() * 30, life: 0.8, c, r: 2.8 });
+        } else if (f.kind === 'mend') for (let i = 0; i < 16; i++) { const a = (i / 16) * Math.PI * 2; this.puffs.push({ x: LENS.x + Math.cos(a) * 34, y: LENS.y + Math.sin(a) * 34, vx: 0, vy: -26, life: 1, c: '#9fe39a', r: 3 }); }
       }
     } else this.seenFx = 0;
-    this.puffs = this.puffs.filter((p) => (p.life -= dt) > 0).slice(-120);
+    this.ringFx = this.ringFx.filter((rg) => (rg.life -= dt) > 0);
+    while (this.ringLayer.childElementCount < this.ringFx.length) svgEl('circle', { fill: 'none', 'stroke-width': 3 }, this.ringLayer);
+    while (this.ringLayer.childElementCount > this.ringFx.length) this.ringLayer.lastChild.remove();
+    this.ringFx.forEach((rg, i) => {
+      const k = 1 - rg.life / rg.max;
+      const el = this.ringLayer.children[i];
+      el.setAttribute('cx', f1(rg.x)); el.setAttribute('cy', f1(rg.y)); el.setAttribute('r', f1(rg.r * (0.4 + 0.6 * k)));
+      el.setAttribute('stroke', rg.c); el.setAttribute('fill', rg.c); el.setAttribute('fill-opacity', (0.25 * (1 - k)).toFixed(2)); el.setAttribute('opacity', (1 - k).toFixed(2));
+    });
+    this.puffs = this.puffs.filter((p) => (p.life -= dt) > 0).slice(-160);
     while (this.puffLayer.childElementCount < this.puffs.length) svgEl('circle', {}, this.puffLayer);
     while (this.puffLayer.childElementCount > this.puffs.length) this.puffLayer.lastChild.remove();
     this.puffs.forEach((p, i) => {

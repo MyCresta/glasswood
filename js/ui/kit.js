@@ -43,6 +43,9 @@ export const ICON = {
   timber: '<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="8" width="16" height="8" rx="4" fill="#8a5a32" stroke="#3a2410" stroke-width="1.4"/><ellipse cx="19" cy="12" rx="3" ry="4" fill="#d9b07a" stroke="#3a2410" stroke-width="1.4"/><circle cx="19" cy="12" r="1.2" fill="#8a5a32"/></svg>',
   stone: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 17 7 9l6-3 6 4 1 7-8 3z" fill="#a39e95" stroke="#3a3530" stroke-width="1.4" stroke-linejoin="round"/><path d="M7 9l5 4 7-3M12 13v7" fill="none" stroke="#6e6a62" stroke-width="1.2"/></svg>',
   next: line('<path d="M4 12h14M13 6l6 6-6 6"/>'),
+  spark: line('<path d="M12 3v5M12 16v5M3 12h5M16 12h5M6 6l3 3M15 15l3 3M6 18l3-3M15 9l3-3"/><circle cx="12" cy="12" r="1.6" fill="currentColor"/>'),
+  tower: line('<path d="M7 21V9l-2-3V3h3v2h2V3h4v2h2V3h3v3l-2 3v12zM10 21v-4a2 2 0 0 1 4 0v4M11 11h2"/>'),
+  ember: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3c1 4 6 5 6 11a6 6 0 0 1-12 0c0-3 2-5 3-6 0 2 1 3 2 3 0-3-1-5 1-8z" fill="#e8743a" stroke="#7a2e12" stroke-width="1.3"/><path d="M12 12c1 2 3 3 3 5a3 3 0 0 1-6 0c0-1 1-2 2-3 0 1 1 1 1 1 0-1 0-2 0-3z" fill="#ffd27a"/></svg>',
   card: line('<rect x="5" y="3.5" width="14" height="17" rx="2"/><circle cx="12" cy="10" r="3"/><path d="M8.5 17c.8-2 2-3 3.5-3s2.7 1 3.5 3"/>'),
 };
 export const creatureIcon = (id) => {

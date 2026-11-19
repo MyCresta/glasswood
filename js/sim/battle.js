@@ -1,13 +1,16 @@
 // Nights: wave generation, enemy movement, the village's archers, wall damage,
 // and the outcome of each night. Runs on a fixed step so results never depend
 // on frame rate, speed or quality settings.
-import {
-  ENEMIES, SCALING, SPAWNS, NIGHT_CAP, DAY_LENGTH, WALL_R, archeryStats, wallStats, BUILDINGS,
-} from '../data/village.js';
+import { ENEMIES, SCALING, SPAWNS, NIGHT_CAP, WALL_R } from '../data/village.js';
 import { routeForSpawn } from './web.js';
-import { availableGold, uid } from './state.js';
-import { workers, villagerArrives } from './village.js';
+import { uid } from './state.js';
+import { build } from './build.js';
+import { deal, endRun } from './run.js';
 import { LOCATIONS } from '../data/world.js';
+
+// Spells, burning and thorns grow with the night, so magic stays useful late.
+export const magicScale = (n) => 1.08 ** (n - 1);
+const TOWER = [0, 0];
 
 const ARROW_SPEED = 18;
 const FX_MAX = 80;
@@ -27,7 +30,7 @@ export function enemyStats(type, n) {
 }
 
 export function waveComposition(n) {
-  const total = 6 + Math.floor((n - 1) * 0.9);
+  const total = 6 + Math.floor((n - 1) * 1.1);
   const wolves = n >= ENEMIES.wolf.first ? Math.round(total * Math.min(0.4, 0.1 + 0.03 * n)) : 0;
   return { goblin: total - wolves, wolf: wolves };
 }
@@ -93,7 +96,9 @@ export function startNight(state, ev) {
     total: Object.values(pv.comp).reduce((a, b) => a + b, 0),
     enemies: [],
     shots: [],
-    cd: 0,
+    cds: {},
+    spellCd: {},
+    startGold: state.gold,
     kills: 0,
     gold: 0,
     wallDamage: 0,
@@ -151,13 +156,41 @@ function remainingDistance(b, e) {
   return Math.hypot(p[0] - e.x, p[1] - e.z) + r.rem[Math.min(e.k, r.pts.length - 1)];
 }
 
-function stepEnemies(state, b, dt) {
-  const walls = wallStats(state.buildings.walls.level);
+// How fast a creature moves now: roots hold it, slows and the frost ward slow it.
+function speedNow(e, bd) {
+  if (e.root > 0) return 0;
+  let f = 1;
+  if (e.slowT > 0) f *= 1 - e.slowF;
+  for (const a of bd.auras) if (a.aura === 'slow' && Math.hypot(e.x, e.z) <= a.radius) f *= 1 - a.slow;
+  return e.speed * f;
+}
+
+function stepStatuses(state, b, bd, dt) {
+  const m = magicScale(b.n);
   for (const e of b.enemies) {
+    if (e.root > 0) e.root -= dt;
+    if (e.slowT > 0) e.slowT -= dt;
+    let burn = 0;
+    if (e.burnT > 0) { e.burnT -= dt; burn += e.burnDps; }
+    for (const a of bd.auras) if (a.aura === 'burn' && Math.hypot(e.x, e.z) <= a.radius) burn += a.dps * bd.burnMul * m;
+    if (burn > 0 && !e.dead) {
+      e.burnAcc = (e.burnAcc || 0) + burn * dt;
+      if (e.burnAcc >= 1) { const d = Math.floor(e.burnAcc); e.burnAcc -= d; damage(state, b, e, d, true, true); }
+    }
+  }
+}
+
+function stepEnemies(state, b, dt) {
+  const bd = build(state);
+  const walls = bd.walls;
+  const thorns = walls.thorns * magicScale(b.n);
+  for (const e of b.enemies) {
+    if (e.dead) continue;
     e.px = e.x; e.pz = e.z;
+    const sp = speedNow(e, bd);
     if (e.state === 'walk') {
       const route = b.routes[e.spawn];
-      let budget = e.speed * dt;
+      let budget = sp * dt;
       while (budget > 1e-6 && e.k < route.pts.length) {
         const [tx, tz] = route.pts[e.k];
         // a small sideways offset keeps a crowd from walking in single file
@@ -175,9 +208,9 @@ function stepEnemies(state, b, dt) {
       }
     }
     if (e.state === 'approach') {
-      const moved = moveToward(e, e.attackAt[0], e.attackAt[1], e.speed * dt);
-      if (moved < e.speed * dt - 1e-6) { e.state = 'attack'; e.cd = 0.3; e.heading = Math.atan2(-e.x, -e.z); }
-    } else if (e.state === 'attack') {
+      const moved = moveToward(e, e.attackAt[0], e.attackAt[1], sp * dt);
+      if (sp > 0 && moved < sp * dt - 1e-6) { e.state = 'attack'; e.cd = 0.3; e.heading = Math.atan2(-e.x, -e.z); }
+    } else if (e.state === 'attack' && !(e.root > 0)) {
       e.cd -= dt;
       if (e.cd <= 0) {
         const hit = Math.max(1, e.dmg - walls.armor);
@@ -185,39 +218,38 @@ function stepEnemies(state, b, dt) {
         b.wallDamage += hit;
         e.cd += 1 / e.rate;
         fx(b, 'wall', e.x, e.z, { dmg: hit });
+        if (thorns > 0) damage(state, b, e, thorns, true);
       }
     }
   }
 }
 
-function pickTargets(state, b, count) {
-  const st = archeryStats(state.buildings.archery.level, workers(state, 'archery'));
-  const mode = state.buildings.archery.target || 'first';
-  const cands = b.enemies.filter((e) => e.hp - e.pending > 0 && Math.hypot(e.x, e.z) <= st.range);
-  const prog = (e) => remainingDistance(b, e);
-  if (mode === 'strongest') cands.sort((a, c) => (c.hp - c.pending) - (a.hp - a.pending) || prog(a) - prog(c));
-  else if (mode === 'fastest') cands.sort((a, c) => c.speed - a.speed || prog(a) - prog(c));
-  else cands.sort((a, c) => prog(a) - prog(c));
+function pickTargets(b, range, count) {
+  const cands = b.enemies.filter((e) => !e.dead && e.hp - e.pending > 0 && Math.hypot(e.x, e.z) <= range);
+  cands.sort((a, c) => remainingDistance(b, a) - remainingDistance(b, c));
   return cands.slice(0, count);
 }
 
-function stepArchers(state, b, dt) {
-  const st = archeryStats(state.buildings.archery.level, workers(state, 'archery'));
-  if (!st.archers) return; // nobody on the tower
-  const [tx, tz] = BUILDINGS.archery.pos;
-  b.cd -= dt;
-  if (b.cd > 0) return;
-  const targets = pickTargets(state, b, st.shots);
-  if (!targets.length) { b.cd = 0; return; }
-  for (const t of targets) {
-    t.pending += st.dmg;
-    b.shots.push({ id: uid(state, 'a'), x: tx, z: tz, px: tx, pz: tz, sx: tx, sz: tz, tid: t.id, lx: t.x, lz: t.z, dmg: st.dmg, pierce: st.pierce, travelled: 0 });
-  }
-  b.cd += 1 / (st.rate * st.archers);
+// The tower and every defender on it shoot on their own clocks.
+function stepShooters(state, b, dt) {
+  const bd = build(state);
+  bd.shooters.forEach((sh, i) => {
+    const key = `${sh.id}:${i}`;
+    b.cds[key] = (b.cds[key] ?? Math.random() * 0) - dt;
+    if (b.cds[key] > 0) return;
+    const targets = pickTargets(b, sh.range, sh.shots);
+    if (!targets.length) { b.cds[key] = 0; return; }
+    for (const t of targets) {
+      t.pending += sh.dmg;
+      b.shots.push({ id: uid(state, 'a'), kind: sh.id, x: TOWER[0], z: TOWER[1], px: TOWER[0], pz: TOWER[1], sx: TOWER[0], sz: TOWER[1], tid: t.id, lx: t.x, lz: t.z, dmg: sh.dmg, sh: i, travelled: 0 });
+    }
+    b.cds[key] += 1 / sh.rate;
+  });
 }
 
-function damage(state, b, e, amount) {
-  const real = Math.max(1, amount - e.armor);
+function damage(state, b, e, amount, quiet = false, ignoreArmor = false) {
+  if (e.dead) return;
+  const real = ignoreArmor ? amount : Math.max(1, amount - e.armor);
   e.hp -= real;
   if (e.hp <= 0 && !e.dead) {
     e.dead = true;
@@ -227,7 +259,54 @@ function damage(state, b, e, amount) {
     state.stats.kills += 1;
     state.stats.goldEarned += e.gold;
     fx(b, 'death', e.x, e.z, { gold: e.gold, type: e.type });
-  } else fx(b, 'hit', e.x, e.z, { eid: e.id });
+  } else if (!quiet) fx(b, 'hit', e.x, e.z, { eid: e.id });
+}
+
+// What a shot does when it lands, by the shooter that loosed it.
+function hitWith(state, b, t, s) {
+  const sh = build(state).shooters[s.sh] || build(state).shooters[0];
+  const beast = ENEMIES[t.type]?.beast;
+  const dmg = s.dmg * (beast ? sh.vsBeast : 1);
+  const m = magicScale(b.n);
+  const apply = (e, d) => {
+    damage(state, b, e, d, false, sh.ignoreArmor);
+    if (sh.burn) { e.burnT = 3 * (build(state).burnMul); e.burnDps = Math.max(e.burnDps && e.burnT > 0 ? e.burnDps : 0, sh.burn * m); }
+    if (sh.slow) { e.slowT = 2; e.slowF = Math.max(e.slowT > 0 ? e.slowF || 0 : 0, sh.slow); }
+  };
+  apply(t, dmg);
+  if (sh.splash) {
+    fx(b, 'splash', t.x, t.z, { r: sh.splash, kind: s.kind });
+    for (const o of b.enemies) if (o !== t && !o.dead && Math.hypot(o.x - t.x, o.z - t.z) <= sh.splash) apply(o, dmg * 0.6);
+  }
+  if (sh.pierce) {
+    const near = b.enemies.filter((o) => o !== t && !o.dead && Math.hypot(o.x - t.x, o.z - t.z) < 1.4).sort((a, c) => Math.hypot(a.x - t.x, a.z - t.z) - Math.hypot(c.x - t.x, c.z - t.z))[0];
+    if (near) apply(near, dmg * 0.7);
+  }
+}
+
+// A spell cast on the glass at (x, z). Active spells have a cooldown.
+export function castSpell(state, id, x, z) {
+  const b = state.battle;
+  if (!b) return { ok: false, reason: 'Spells are cast during the night.' };
+  const sp = build(state).active.find((s) => s.id === id);
+  if (!sp) return { ok: false, reason: 'You do not have that spell.' };
+  if ((b.spellCd[id] || 0) > 0) return { ok: false, reason: 'Not ready yet.' };
+  const m = magicScale(b.n);
+  if (sp.mend) {
+    const max = build(state).walls.integrity;
+    state.integrity = Math.min(max, state.integrity + max * sp.mend);
+    fx(b, 'mend', 0, 0, {});
+  } else {
+    for (const e of b.enemies) {
+      if (e.dead || Math.hypot(e.x - x, e.z - z) > sp.radius) continue;
+      if (sp.dmg) damage(state, b, e, sp.dmg * m, false, true);
+      if (sp.burn) { e.burnT = 3 * build(state).burnMul; e.burnDps = sp.burn * m; }
+      if (sp.root) e.root = sp.root;
+    }
+    fx(b, id, x, z, { r: sp.radius });
+  }
+  b.spellCd[id] = sp.cd;
+  return { ok: true };
 }
 
 function stepShots(state, b, dt) {
@@ -244,11 +323,7 @@ function stepShots(state, b, dt) {
     if (d <= step + 0.05) {
       if (t && !t.dead) {
         t.pending = Math.max(0, t.pending - s.dmg);
-        damage(state, b, t, s.dmg);
-        if (s.pierce) {
-          const near = b.enemies.filter((o) => o !== t && !o.dead && Math.hypot(o.x - t.x, o.z - t.z) < 0.9).sort((a, c) => Math.hypot(a.x - t.x, a.z - t.z) - Math.hypot(c.x - t.x, c.z - t.z))[0];
-          if (near) damage(state, b, near, s.dmg * 0.5);
-        }
+        hitWith(state, b, t, s);
       } else if (t) t.pending = Math.max(0, t.pending - s.dmg);
       continue;
     }
@@ -266,9 +341,13 @@ export function stepNight(state, dt, ev) {
   b.t += dt;
   state.phaseT += dt;
   while (b.next < b.schedule.length && b.schedule[b.next].t <= b.t) spawnEnemy(state, b, b.schedule[b.next++]);
+  const bd = build(state);
+  stepStatuses(state, b, bd, dt);
   stepEnemies(state, b, dt);
-  stepArchers(state, b, dt);
+  stepShooters(state, b, dt);
   stepShots(state, b, dt);
+  for (const k of Object.keys(b.spellCd)) b.spellCd[k] = Math.max(0, b.spellCd[k] - dt);
+  b.enemies = b.enemies.filter((e) => !e.dead);
   if (state.integrity <= 0) return endNight(state, false, ev);
   const allSpawned = b.next >= b.schedule.length;
   if (allSpawned && !b.enemies.length) return endNight(state, true, ev);
@@ -281,44 +360,40 @@ export function stepNight(state, dt, ev) {
 export function endNight(state, won, ev) {
   const b = state.battle;
   const n = b.n;
-  const report = { n, won, kills: b.kills, total: b.total, gold: b.gold, wallDamage: b.wallDamage, retreated: b.retreated || 0, lost: 0, reward: 0 };
-  if (won) {
-    const reward = dawnReward(n);
-    state.gold += reward;
-    state.stats.goldEarned += reward;
-    report.reward = reward;
-    state.lastResult[n] = 'won';
-    state.stats.nightsWon += 1;
-    const record = n > state.best;
-    const before = state.best;
-    state.best = Math.max(state.best, n);
-    // holding a new night can reveal a new place in the globe
-    for (const l of LOCATIONS) if (l.found > before && l.found <= state.best && l.name) ev.emit('done', `Discovered: ${l.name}`, { cat: 'discover', place: l.id });
-    if (!state.hold) state.night = n + 1;
-    ev.emit('done', `Night ${n} held. +${b.gold + reward} gold${record && n > 1 ? '. New best' : ''}`, { cat: 'night', record });
-    ev.sound?.('dawn');
-    report.arrived = villagerArrives(state, ev);
-  } else {
-    const lost = Math.floor(availableGold(state) * 0.1);
-    state.gold -= lost;
-    report.lost = lost;
-    state.lastResult[n] = 'lost';
-    state.stats.nightsLost += 1;
-    state.night = Math.max(1, n - 2);
-    ev.emit('attention', `Walls fell. −${lost} gold. Back to night ${state.night}`, { cat: 'night' });
-    ev.sound?.('fall');
-  }
+  const report = { n, won, kills: b.kills, total: b.total, gold: b.gold, wallDamage: b.wallDamage, retreated: b.retreated || 0, reward: 0 };
   state.lastReport = report;
   state.battle = null;
-  state.phase = 'day';
   state.phaseT = 0;
-  state.dayLength = DAY_LENGTH;
-  state.integrity = wallStats(state.buildings.walls.level).integrity;
   ev.changed = true;
+  if (!won) {
+    ev.sound?.('fall');
+    endRun(state, ev);
+    return;
+  }
+  const reward = dawnReward(n);
+  state.gold += reward;
+  state.stats.goldEarned += reward;
+  report.reward = reward;
+  state.stats.nightsWon += 1;
+  const before = state.best;
+  state.best = Math.max(state.best, n);
+  // holding a new night can reveal a new place in the globe
+  for (const l of LOCATIONS) if (l.found > before && l.found <= state.best && l.name) ev.emit('done', `Discovered: ${l.name}`, { cat: 'discover', place: l.id });
+  state.night = n + 1;
+  ev.emit('done', `Night ${n} held. +${b.gold + reward} gold`, { cat: 'night' });
+  ev.sound?.('dawn');
+  // the walls are mended at dawn, and three cards are dealt
+  state.integrity = build(state).walls.integrity;
+  state.offerSalt = 0;
+  state.offer = deal(state);
+  state.phase = 'draft';
 }
 
-export function safeNight(state) {
-  let best = 0;
-  for (const [n, r] of Object.entries(state.lastResult)) if (r === 'won') best = Math.max(best, Number(n));
-  return best;
+// A night left half-fought (the page closed) starts again from its beginning.
+export function restartNight(state) {
+  if (state.phase !== 'night' || !state.battle) return;
+  state.gold = state.battle.startGold ?? state.gold;
+  state.battle = null;
+  state.phase = 'day';
+  state.integrity = build(state).walls.integrity;
 }

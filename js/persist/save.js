@@ -1,5 +1,6 @@
 // Browser persistence: autosave, a rolling recoverable backup, export/import.
 import { newGame } from '../sim/state.js';
+import { restartNight } from '../sim/battle.js';
 import { SAVE_VERSION } from '../sim/state.js';
 
 const KEY = 'glasswood.save';
@@ -24,31 +25,20 @@ export function serialize(state) {
 export function migrate(data) {
   if (!data || typeof data !== 'object') throw new Error('This is not a Glasswood save.');
   if (data.colonies && !data.village) throw new Error('This save is from the earlier colony prototype, which works differently.');
-  if (!data.village || !data.buildings || typeof data.gold !== 'number') throw new Error('The save is missing required parts.');
+  if (!data.village) throw new Error('The save is missing required parts.');
   if ((data.version || 0) > SAVE_VERSION) throw new Error('This save comes from a newer version of Glasswood.');
-  if ((data.version || 0) < 4) {
-    // Before version 4 the village started whole and ran on gold alone. Levels
-    // mean something different now, so the village starts again from its ruins,
-    // keeping its name and the player's settings.
-    const fresh = newGame({ name: data.village.name, emblem: data.village.emblem, color: data.village.color });
-    fresh.settings = { ...fresh.settings, ...data.settings };
-    fresh.ui = { ...fresh.ui, guideDismissed: true };
+  if ((data.version || 0) < 6) {
+    // Before version 6 the game was an idle village. It is a roguelike now:
+    // keep the village's name and the settings, and start the first run.
+    const fresh = newGame({ name: data.village.name });
+    fresh.settings = { ...fresh.settings, ...data.settings, autoView: false };
     fresh.restarted = true;
     return fresh;
   }
-  data.version = SAVE_VERSION;
-  data.log ||= [];
-  data.objectives ||= { claimed: [], flags: {} };
-  data.settings ||= {};
-  data.ui ||= {};
-  data.lastResult ||= {};
-  if (!Array.isArray(data.barricades)) data.barricades = [];
-  data.settings.sound ??= true;
-  // since version 5: no night speed, and the view no longer moves on its own at dusk
-  if ((data.version || 0) < 5) { data.settings.autoView = false; data.speed = 1; }
   data.ui ||= {};
   data.ui.view ||= 'watch';
-  if (data.battle && !data.battle.routes) data.battle = null; // a night saved by the 3D version: restart it
+  // a night left half-fought starts again from its beginning
+  restartNight(data);
   return data;
 }
 
@@ -100,16 +90,6 @@ export function parseImport(text) {
   } else if (t.startsWith('{')) json = t;
   else throw new Error('Paste a save code that starts with GLASSWOOD1, or choose an exported file.');
   return migrate(JSON.parse(json));
-}
-
-export function summarizeSave(s) {
-  return {
-    name: s.village.name,
-    night: s.night,
-    best: s.best,
-    townhall: s.buildings.townhall?.level || 1,
-    hours: s.time / 3600,
-  };
 }
 
 export function downloadText(filename, text) {
