@@ -116,7 +116,7 @@ export class Desk {
     this.place.root.hidden = v !== 'wilds';
     this.building.root.hidden = v !== 'hearth';
     this.barr.root.hidden = v !== 'watch';
-    this.village.root.hidden = v === 'wilds';
+    this.village.root.hidden = v !== 'watch';
     if (v === 'wilds') this.refreshPlace(s);
     if (v === 'hearth') this.refreshBuilding(s);
     this.refreshTask(s);

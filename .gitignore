@@ -4,3 +4,6 @@ _site/
 tools/design/desk/
 tools/design/art2/
 __pycache__/
+assets/*.svg
+!assets/paper.svg
+!assets/globe-glass.svg

@@ -28,10 +28,18 @@ python3 portraits.py
 
 ## Game assets
 
-The Watch view's static artwork comes from the same scripts:
+The game's static artwork comes from the same scripts (`globe6.py` draws the globe, its stand, the mountains and the two glasses):
 
 ```
 cd tools/design
-python3 make_game_assets.py              # writes assets/watch-base.svg, assets/watch-glass.svg and js/render/defs.js
-cd ../.. && python3 tools/design/rasterize.py assets/watch-base.svg && rm assets/watch-base.svg
+python3 make_game_assets.py     # writes the SVGs below into assets/, plus js/render/defs.js and js/data/hotspots.js
+python3 rasterize.py --scale 2 ../../assets/{desk,globe-base,globe-terrain,watch,watch-frame,hearth,hearth-frame}.svg
 ```
+
+- `globe-base`: the turned wooden stand with its brass horizon ring, feet and shadow.
+- `globe-terrain`: the world inside the globe. The Watch's forest map is drawn into it in miniature at the village, so the glasses can zoom from one into the other.
+- `globe-glass.svg`: the sphere's glass (rim, candle light, reflections). It is kept as SVG.
+- `watch` and `hearth`: what each glass shows at full zoom.
+- `watch-frame` and `hearth-frame`: the glasses themselves. They are drawn in a second SVG layer above the notes.
+
+Only the WebP files (and `paper.svg`, `globe-glass.svg`) are committed.

@@ -196,7 +196,7 @@ def store(X,Y):
     o+=f'<rect x="{X+30}" y="{Y-16}" width="16" height="16" fill="#a8743e" stroke="{OL}"/><path d="M{X+30} {Y-16} l16 16 M{X+46} {Y-16} l-16 16" stroke="{OL}" stroke-width=".8"/><ellipse cx="{X-34}" cy="{Y-8}" rx="8" ry="10" fill="#e6d4a8" stroke="{OL}"/>'
     return o
 def blacksmith_ruin(X,Y,w):
-    o=ruin(X,Y,w,sel=True,seed=6)
+    o=ruin(X,Y,w,sel=False,seed=6)
     o+=f'<rect x="{X+w*.35}" y="{Y-50}" width="18" height="50" fill="#77726c" stroke="#2a2622" stroke-width="1.2"/>'+''.join(f'<path d="M{X+w*.35} {Y-50+k*10} h18" stroke="#2a2622" stroke-opacity=".5"/>' for k in range(1,5))
     o+=f'<path d="M{X-w*.62} {Y-2} h22 l-4 -6 h4 v-6 h-22 v6 h4z" fill="#3a3a40" stroke="{OL}" stroke-width="1.2"/>'
     return o

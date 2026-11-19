@@ -9,7 +9,7 @@ export class HearthView {
   constructor(root, { onBuilding } = {}) {
     this.root = root;
     this.onBuilding = onBuilding;
-    svgEl('image', { href: 'assets/hearth.webp', x: 0, y: 0, width: 1440, height: 900 }, root);
+    svgEl('image', { href: 'assets/hearth.webp', x: 236, y: 56, width: 800, height: 748 }, root);
     const live = svgEl('g', { 'clip-path': 'url(#hearthclip)' }, root);
     this.tint = svgEl('ellipse', { cx: HEARTH.cx, cy: HEARTH.cy, rx: HEARTH.rx, ry: HEARTH.ry, fill: '#140f3a', opacity: 0, 'pointer-events': 'none' }, live);
     this.marks = svgEl('g', {}, live);

@@ -31,7 +31,7 @@ export class WatchView {
     this.onEdge = onEdge;
     this.onEdgeHover = onEdgeHover;
     this.onSpawn = onSpawn;
-    svgEl('image', { href: 'assets/watch.webp', x: 0, y: 0, width: 1440, height: 900 }, root);
+    svgEl('image', { href: 'assets/watch.webp', x: 280, y: 60, width: 700, height: 700 }, root);
     this.live = svgEl('g', { 'clip-path': 'url(#lensclip)' }, root);
     this.nightTint = svgEl('circle', { cx: LENS.x, cy: LENS.y, r: LENS.r, fill: '#1a1450', opacity: 0 }, this.live);
     this.glows = svgEl('g', {}, this.live);
@@ -44,7 +44,6 @@ export class WatchView {
     this.arrows = svgEl('g', {}, this.live);
     this.fireflies = svgEl('g', {}, this.live);
     this.puffLayer = svgEl('g', {}, this.live);
-    svgEl('image', { href: 'assets/watch-glass.svg', x: 0, y: 0, width: 1440, height: 900, 'pointer-events': 'none' }, root);
     this.tags = svgEl('g', {}, root);
     this.sprites = new Map();
     this.arrowEls = new Map();
@@ -104,15 +103,23 @@ export class WatchView {
       if (isOpen) svgEl('circle', { cx: X, cy: Y, r: 40, fill: 'url(#vg)', class: 'burrow-glow' }, this.glows);
       // a pinned paper tag, inside the glass
       const label = isOpen ? sp.name : `${sp.name}, night ${sp.opens}`;
-      const w = label.length * 7.4 + 22;
-      const inside = Math.hypot(X - LENS.x, Y + 18 - LENS.y) < LENS.r - 10;
-      const ty = inside ? Y + 14 : Y - 40;
-      const side = Math.abs(X - LENS.x) > LENS.r * 0.6 ? Math.sign(X - LENS.x) : 0;
-      const tx = X - side * w * 0.38;
+      const w = label.length * 8.4 + 24;
+      // keep the whole tag inside the glass: start just below the burrow, then
+      // pull it towards the middle until every corner fits
+      let tx = X, ty = Y + 16;
+      for (let i = 0; i < 12; i++) {
+        let far = 0;
+        for (const [cx, cy] of [[tx - w / 2, ty], [tx + w / 2, ty], [tx - w / 2, ty + 25], [tx + w / 2, ty + 25]]) far = Math.max(far, Math.hypot(cx - LENS.x, cy - LENS.y));
+        const over = far - (LENS.r - 16);
+        if (over <= 0) break;
+        const d = Math.hypot(tx - LENS.x, ty + 11 - LENS.y) || 1;
+        tx -= ((tx - LENS.x) / d) * (over + 1); ty -= ((ty + 11 - LENS.y) / d) * (over + 1);
+      }
+      const pin = Math.max(-w / 2 + 8, Math.min(w / 2 - 8, X - tx));
       const g = svgEl('g', { class: 'hit', transform: `translate(${f1(tx)} ${f1(ty)}) rotate(${(sp.node.charCodeAt(1) % 3) - 1})`, role: 'button', tabindex: 0, 'aria-label': `${sp.name}: ${isOpen ? 'open' : `opens on night ${sp.opens}`}` }, this.tags);
-      svgEl('rect', { x: -w / 2, y: 0, width: w, height: 22, fill: isOpen ? '#cdb184' : '#9d8866', stroke: '#5a4428', 'stroke-width': 0.8 }, g);
-      svgEl('circle', { cx: side * w * 0.38, cy: 0, r: 4.5, fill: '#9e3426', stroke: '#5c1520' }, g);
-      const t = svgEl('text', { x: 0, y: 16, 'text-anchor': 'middle', 'font-family': 'Kalam, cursive', 'font-size': 13.5, fill: '#23170f' }, g);
+      svgEl('rect', { x: -w / 2, y: 0, width: w, height: 25, fill: isOpen ? '#cdb184' : '#9d8866', stroke: '#5a4428', 'stroke-width': 0.8 }, g);
+      svgEl('circle', { cx: pin, cy: 0, r: 4.5, fill: '#9e3426', stroke: '#5c1520' }, g);
+      const t = svgEl('text', { x: 0, y: 18, 'text-anchor': 'middle', 'font-family': 'Kalam, cursive', 'font-size': 15.5, fill: '#23170f' }, g);
       t.textContent = label;
       g.addEventListener('click', () => this.onSpawn?.(sp.id));
     }
