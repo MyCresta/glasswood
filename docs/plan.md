@@ -99,27 +99,31 @@ These carry over from revision 4 unchanged in substance:
 
 Emberfold sits in a mossy clearing with a stream on its east side, a raised terrace in the north-west, a low stone wall with lantern posts, and a vine-covered gate arch to the south. Everything is old wood, stone and moss, lit by round amber windows, door lanterns, strings of coloured lights and glowing mushrooms.
 
-### 7.2 Buildings
+### 7.2 Starting in ruins
 
-Every building has a fixed spot, a distinct look and its own note when selected. Ruins show what they need to be restored.
+A new game starts with the village overgrown: a campfire, the stump of the Great Tower with one archer (Wren), a ring of stakes, and ruins. Bram has nothing to do yet. The first goals walk the player through bringing it back: survive the first night, restore the Lumber Camp, the Tavern, the Workshop (and with it the first barricade), the Quarry and the Town Hall, then raise the tower.
 
-| Building | Look | Role |
+### 7.3 Buildings, levels and what they bring
+
+Every level is a milestone with a visible gain, a cost in Gold, Timber and Stone, and a build time: minutes for the first restorations, hours for later levels. Each building is drawn in three stages (ruin or humble first version, restored, grown) and changes in place when it reaches the next one. The numbers live in `js/data/village.js`.
+
+| Building | Starts | What each level brings |
 | --- | --- | --- |
-| Great Tower | Ivy-covered stone tower with a wooden lookout and mossy roof | Archers; the main defence |
-| Town Hall | Timber hall with a bell tower and banner | Level caps and progression |
-| Tavern | Two-storey timber house with a jutting upper floor, a mug sign and a table outside | Recruiting, housing, expedition parties |
-| Library | Blue-domed stone house on the raised terrace, reached by lit stairs | Knowledge and research |
-| Mill | Wooden mill on the stream with a water wheel | Food (with the farm) |
-| Farmstead | Red barn, hay bales, crop rows and a scarecrow | Food |
-| Lumber Camp | Lean-to with a log pile, sawhorse and axe | Timber |
-| Blacksmith | Fallen-in forge by the east bridge, anvil under the ivy (ruin at start) | Gear for villager cards |
-| Workshop | Ruin at start | Barricades, traps, repairs |
-| Mage Tower | Crooked broken tower among glowing crystals (ruin at start) | Area spells |
-| Standing Stones | Ring of glowing runestones (ruin at start) | The temple: healing and blessings |
-| Storehouse | Small shed with crates and sacks | Storage |
-| Stump house | A cottage in an old tree stump with a toadstool roof | Housing |
+| Great Tower | 1, a stump | Archer posts 1 → 4, reach, fire arrows at 4, two arrows each at 6 |
+| Walls & Gate | 1, stakes | Strength 500 → 2000, armour 0 → 4 |
+| Town Hall | ruin | How far other buildings can grow (its level + 1); a second builder at 2 |
+| Tavern | ruin | Beds 2 → 10. With a bed free, a traveller settles after every night held |
+| Lumber Camp | ruin | Woodcutter posts and Timber per worker |
+| Quarry | ruin | Mason posts and Stone per worker |
+| Workshop | ruin | Barricades 0 → 4 |
 
-Quarry, Mine and Market sit outside the walls and appear in Hearth's forest edge as small sites. Level costs, caps and restoration rules carry over from revision 4.
+### 7.4 Villagers and posts
+
+Villagers are the slow resource. Each one has a post: on the tower (an archer), at the Lumber Camp, at the Quarry, or resting. New villagers take a free post on their own, the tower first. The player moves them with − and + on a building's card. They stand at their posts in Hearth. Villager cards (section 8) build on this.
+
+### 7.5 Pace
+
+A sensible player holds night 10 within about half an hour, then each big milestone (the tower's second floor, the Town Hall's second builder, fire arrows) moves them several nights further. A player who never builds tops out around night 5. Gold comes from nights; Timber and Stone come only from workers, so they decide what gets built.
 
 ## 8. Villagers are cards
 

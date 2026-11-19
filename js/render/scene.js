@@ -46,7 +46,7 @@ function layerSvg(stage, cls, before = null) {
 
 // Big images decode the first time they are drawn, which would stall the first
 // zoom; decode them up front instead.
-const IMAGES = ['desk', 'globe-base', 'globe-terrain', 'watch', 'watch-frame', 'hearth', 'hearth-frame'].map((n) => `assets/${n}.webp`);
+const IMAGES = ['desk', 'globe-base', 'globe-terrain', 'watch', 'watch-frame', 'hearth-base', 'hearth-front', 'walls-0', 'hearth-frame'].map((n) => `assets/${n}.webp`);
 export function preloadImages() {
   return Promise.all(IMAGES.map((src) => { const i = new Image(); i.src = src; return i.decode().catch(() => {}); }));
 }

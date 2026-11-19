@@ -1,4 +1,5 @@
 // Browser persistence: autosave, a rolling recoverable backup, export/import.
+import { newGame } from '../sim/state.js';
 import { SAVE_VERSION } from '../sim/state.js';
 
 const KEY = 'glasswood.save';
@@ -25,6 +26,16 @@ export function migrate(data) {
   if (data.colonies && !data.village) throw new Error('This save is from the earlier colony prototype, which works differently.');
   if (!data.village || !data.buildings || typeof data.gold !== 'number') throw new Error('The save is missing required parts.');
   if ((data.version || 0) > SAVE_VERSION) throw new Error('This save comes from a newer version of Glasswood.');
+  if ((data.version || 0) < 4) {
+    // Before version 4 the village started whole and ran on gold alone. Levels
+    // mean something different now, so the village starts again from its ruins,
+    // keeping its name and the player's settings.
+    const fresh = newGame({ name: data.village.name, emblem: data.village.emblem, color: data.village.color });
+    fresh.settings = { ...fresh.settings, ...data.settings };
+    fresh.ui = { ...fresh.ui, guideDismissed: true };
+    fresh.restarted = true;
+    return fresh;
+  }
   data.version = SAVE_VERSION;
   data.log ||= [];
   data.objectives ||= { claimed: [], flags: {} };
@@ -32,7 +43,6 @@ export function migrate(data) {
   data.ui ||= {};
   data.lastResult ||= {};
   if (!Array.isArray(data.barricades)) data.barricades = [];
-  for (const id of ['tavern', 'library', 'storehouse', 'market']) if (data.buildings[id] && data.buildings[id].level < 1) data.buildings[id].level = 1;
   data.settings.sound ??= true;
   data.settings.autoView ??= true;
   data.ui ||= {};

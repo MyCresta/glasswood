@@ -1,6 +1,6 @@
-import { BUILDINGS, START_GOLD, FIRST_DAY, wallStats } from '../data/village.js';
+import { BUILDINGS, START, VILLAGERS, FIRST_DAY, wallStats } from '../data/village.js';
 
-export const SAVE_VERSION = 3;
+export const SAVE_VERSION = 4;
 
 export function newGame({ name = 'Emberfold', emblem = 'leaf', color = '#f0a86b', seed, now = Date.now() } = {}) {
   const buildings = {};
@@ -16,8 +16,11 @@ export function newGame({ name = 'Emberfold', emblem = 'leaf', color = '#f0a86b'
     paused: false,
     speed: 1, // night speed: 1 or 2
     village: { name, emblem, color },
-    gold: START_GOLD,
-    reserved: 0,
+    gold: START.gold,
+    timber: START.timber,
+    stone: START.stone,
+    reserved: { gold: 0, timber: 0, stone: 0 },
+    villagers: VILLAGERS.start.map(([n, job], i) => ({ id: `v${i + 1}`, name: n, job: job === 'archer' ? 'archery' : 'idle' })),
     buildings,
     queue: [],
     phase: 'day',
@@ -42,7 +45,7 @@ export function newGame({ name = 'Emberfold', emblem = 'leaf', color = '#f0a86b'
       sound: true,
       autoView: true,
     },
-    ui: { guideDismissed: false, view: 'watch' },
+    ui: { guideDismissed: false, view: 'watch', building: 'archery' },
   };
 }
 
@@ -52,5 +55,5 @@ export function uid(state, p = 'x') {
 }
 
 export function availableGold(state) {
-  return Math.max(0, state.gold - state.reserved);
+  return Math.max(0, state.gold - (state.reserved.gold || 0));
 }

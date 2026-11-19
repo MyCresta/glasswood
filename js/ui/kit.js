@@ -13,6 +13,7 @@
 //   chips    short words (rewards, traits)
 //   hint     one soft line of help at the foot of a card
 //   tabs     the leather strip of views
+//   stepper  − value +, for moving villagers between posts
 //   portrait the slot for a trading card's picture (villagers, creatures)
 import { h } from './dom.js';
 
@@ -39,6 +40,9 @@ export const ICON = {
   hearth: line('<path d="M3.5 21V12l4.5-4.5L12.5 12v9M12.5 21V5.5h5.5V21M17.5 5.5l-2.6-3.3-2.4 3.3M2 21h20"/>'),
   place: line('<path d="M12 21s-6.5-6-6.5-11a6.5 6.5 0 0 1 13 0c0 5-6.5 11-6.5 11z"/><circle cx="12" cy="10" r="2.4"/>'),
   danger: line('<path d="M12 3.5 21 19.5H3z"/><path d="M12 9.5v4.5M12 16.8v.2"/>'),
+  timber: '<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="8" width="16" height="8" rx="4" fill="#8a5a32" stroke="#3a2410" stroke-width="1.4"/><ellipse cx="19" cy="12" rx="3" ry="4" fill="#d9b07a" stroke="#3a2410" stroke-width="1.4"/><circle cx="19" cy="12" r="1.2" fill="#8a5a32"/></svg>',
+  stone: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 17 7 9l6-3 6 4 1 7-8 3z" fill="#a39e95" stroke="#3a3530" stroke-width="1.4" stroke-linejoin="round"/><path d="M7 9l5 4 7-3M12 13v7" fill="none" stroke="#6e6a62" stroke-width="1.2"/></svg>',
+  next: line('<path d="M4 12h14M13 6l6 6-6 6"/>'),
   card: line('<rect x="5" y="3.5" width="14" height="17" rx="2"/><circle cx="12" cy="10" r="3"/><path d="M8.5 17c.8-2 2-3 3.5-3s2.7 1 3.5 3"/>'),
 };
 export const creatureIcon = (id) => {
@@ -117,6 +121,11 @@ export const chips = (words) => h('div.chips', {}, words.map((w) => h('span.chip
 export const hint = (text, tone = 'soft', title) => h(`span.hint.${tone}`, { title }, text);
 export const badge = (value, title) => h('span.badge', { title }, value);
 export const pips = (n, of = 5, title) => h('span.pips', { title }, h('b.red', {}, '◆'.repeat(n)), h('span.dim', {}, '◆'.repeat(of - n)));
+
+// stepper: − and + around a value, for moving villagers between posts
+export const stepper = (value, onMinus, onPlus, title, { canMinus = true, canPlus = true } = {}) => h('span.stepper', { title },
+  h('button.step', { type: 'button', 'aria-label': 'One fewer', disabled: !canMinus || null, onclick: onMinus }, '−'), h('b', {}, value),
+  h('button.step', { type: 'button', 'aria-label': 'One more', disabled: !canPlus || null, onclick: onPlus }, '+'));
 
 // tabs: the leather strip of views
 export function tabs(items, onPick) {

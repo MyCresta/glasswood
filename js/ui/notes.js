@@ -2,12 +2,12 @@
 //   left:  village · views · goal · hand (later) · tools
 //   right: time (the night) · focus (what the current view is about) · detail (later)
 import { h, dur } from './dom.js';
-import { BUILDINGS, ENEMIES, SPAWNS, BARRICADES, archeryStats, wallStats } from '../data/village.js';
+import { BUILDINGS, ENEMIES, SPAWNS, archeryStats, wallStats, level } from '../data/village.js';
 import { nightPreview } from '../sim/battle.js';
-import { upgradeBlocker, upgradeCost, upgradeTime, OBJECTIVES } from '../sim/village.js';
+import { upgradeBlocker, upgradeCost, upgradeTime, OBJECTIVES, available, barricadeMax, workers, slots, housing, production, builders, levelCap, rewardText } from '../sim/village.js';
 import { LOCATIONS, LOCATION_KINDS } from '../data/world.js';
 import { canBlock, routeLengths, EDGE } from '../sim/web.js';
-import { ICON, card, head, fact, facts, meter, seal, slip, action, tokens, toggle, pieces, chips, hint, badge, pips, tabs, icon, slots, SLOTS, fill } from './kit.js';
+import { ICON, card, head, fact, facts, meter, seal, slip, action, tokens, toggle, pieces, chips, hint, badge, pips, tabs, icon, slots as makeSlots, SLOTS, fill, stepper } from './kit.js';
 
 export { slip };
 
@@ -15,8 +15,8 @@ export class Desk {
   constructor(game) {
     this.g = game;
     this.news = document.getElementById('news');
-    this.L = slots(document.getElementById('left'), SLOTS.left);
-    this.R = slots(document.getElementById('right'), SLOTS.right);
+    this.L = makeSlots(document.getElementById('left'), SLOTS.left);
+    this.R = makeSlots(document.getElementById('right'), SLOTS.right);
     this.sig = {};
     this.hover = null;
     this.build();
@@ -53,8 +53,15 @@ export class Desk {
     const s = this.g.state;
     document.body.classList.toggle('night', s.phase === 'night');
     this.views.select(s.ui.view);
-    const gold = Math.floor(s.gold - s.reserved);
-    this.part('village', `${s.village.name}|${gold}`, () => this.village.set({ head: head(null, s.village.name, fact('coin', gold, 'Gold', null, 'gold')) }));
+    const have = ['gold', 'timber', 'stone'].map((r) => Math.floor(available(s, r)));
+    const prod = production(s);
+    this.part('village', `${s.village.name}|${have}|${s.villagers.length}|${housing(s)}|${prod.timber}|${prod.stone}`, () => this.village.set({
+      head: head(null, s.village.name, fact('people', `${s.villagers.length}/${housing(s)}`, 'Villagers, and beds for them')),
+      content: h('div.res', {},
+        fact('coin', have[0], 'Gold', null, 'gold'),
+        fact('timber', have[1], prod.timber ? `Timber: +${Math.round(prod.timber * 60)} a minute` : 'Timber: restore the Lumber Camp'),
+        fact('stone', have[2], prod.stone ? `Stone: +${Math.round(prod.stone * 60)} a minute` : 'Stone: restore the Quarry')),
+    }));
     this.refreshGoal(s);
     this.refreshTime(s);
     if (s.ui.view === 'wilds') this.refreshPlace(s);
@@ -66,7 +73,8 @@ export class Desk {
     const o = OBJECTIVES.find((x) => !x.future && !s.objectives.claimed.includes(x.id));
     this.L.goal.hidden = !o;
     if (!o) return;
-    this.part('goal', o.id, () => this.goal.set({ head: head(icon('goal', 'red'), o.title, o.reward ? fact('coin', `+${o.reward}`, `${o.reward} gold when done`) : null, { title: o.guide }) }));
+    const [r, n] = Object.entries(o.reward || {})[0] || [];
+    this.part('goal', o.id, () => this.goal.set({ head: head(icon('goal', 'red'), o.title, r ? fact(r === 'gold' ? 'coin' : r, `+${n}`, `${rewardText(o.reward)} when done`) : null, { title: o.guide }) }));
   }
 
   refreshTime(s) {
@@ -129,25 +137,38 @@ export class Desk {
     const lv = s.buildings[id]?.level ?? 0;
     const bl = upgradeBlocker(s, id) || '';
     const q = s.queue.find((x) => x.bid === id);
-    this.part('focus', `bld|${id}|${lv}|${bl.startsWith('Needs') ? 'gold' : bl}|${q ? q.id : ''}`, () => {
+    const w = def.job ? workers(s, id) : 0;
+    const idle = s.villagers.filter((v) => v.job === 'idle').length;
+    this.part('focus', `bld|${id}|${lv}|${bl.startsWith('Needs') ? 'res' : bl}|${q ? q.id : ''}|${w}|${idle}|${s.villagers.length}|${barricadeMax(s)}`, () => {
+      const v = level(id, lv);
       const stats = [];
-      if (id === 'archery') { const st = archeryStats(lv); stats.push(fact('dmg', st.dmg.toFixed(1), 'Damage per arrow'), fact('reach', st.range.toFixed(1), 'Reach'), fact('rate', st.rate.toFixed(2), 'Shots a second'), fact('people', st.archers || 2 + Math.floor(lv / 2), 'Archers')); }
-      if (id === 'walls') { const st = wallStats(lv); stats.push(fact('wall', st.integrity, 'Strength (repaired every dawn)'), fact('armor', st.armor, 'Armour against every hit')); }
-      if (id === 'townhall') stats.push(fact('cap', lv * 2, 'Other buildings can grow to this level'));
+      if (def.job) stats.push(stepper(`${w}/${v.slots || 0}`, () => this.g.unpost(id), () => this.g.post(id), `${def.jobs}: ${w} of ${v.slots || 0} posts filled${idle ? `, ${idle} resting` : ''}`, { canMinus: w > 0, canPlus: w < (v.slots || 0) && s.villagers.length > w }));
+      if (id === 'archery') { const st = archeryStats(lv, w); stats.push(fact('dmg', st.dmg.toFixed(1), 'Damage per arrow'), fact('reach', st.range.toFixed(1), 'Reach'), st.shots > 1 ? fact('rate', `×${st.shots}`, 'Arrows per shot') : null); }
+      if (id === 'walls') { const st = wallStats(lv); stats.push(fact('wall', st.integrity, 'Strength (mended every dawn)'), fact('armor', st.armor, 'Armour against every hit')); }
+      if (id === 'townhall') stats.push(fact('cap', levelCap(s, 'tavern'), 'Other buildings can grow to this level'), fact('build', builders(s), 'Builders working at the same time'));
+      if (id === 'tavern') stats.push(fact('people', `${s.villagers.length}/${housing(s)}`, 'Villagers and beds. A traveller settles after every night held, if there is a bed'));
+      if (def.makes) stats.push(fact(def.makes, `+${Math.round(Math.min(w, v.slots || 0) * (v.per || 0))}`, `${def.makes[0].toUpperCase() + def.makes.slice(1)} a minute`, '/min'));
+      if (id === 'workshop') stats.push(fact(h('span.ic', { html: ICON.barr }), barricadeMax(s), 'Barricades you can place'));
+      const next = def.levels[lv + 1];
+      const kids = [facts(...stats)];
+      if (next) kids.push(h('div.next', { title: 'The next level' }, icon('next'), h('span', {}, next.gain)));
       let foot;
       this.qBar = null;
-      if (q) { this.qBar = meter('build', q === s.queue[0] ? 'Being built' : 'Waiting for the builders', 'gold'); foot = this.qBar.el; }
-      else if (bl.startsWith('Already')) foot = hint('Highest level');
+      if (q) { this.qBar = meter('build', s.queue.indexOf(q) < builders(s) ? 'Being built' : 'Waiting for a builder', 'gold'); foot = this.qBar.el; }
+      else if (!next) foot = hint('Highest level');
       else {
         let why = null;
-        if (bl.startsWith('Needs')) why = fact('coin', `−${bl.match(/\d+/)[0]}`, bl, null, 'red');
+        if (bl.startsWith('Needs')) { const [, n, r] = bl.match(/(\d+) more (\w+)/); why = hint(`${n} more ${r}`, 'red', bl); }
         else if (bl.startsWith('Raise the Town Hall')) why = hint('Town Hall first', 'red', bl);
         else if (bl) why = hint('Builders busy', 'red', bl);
-        foot = action(seal('Upgrade', () => this.g.upgrade(id), { title: `To level ${lv + 1}` }), fact('coin', upgradeCost(id, lv), 'Cost'), fact('time', dur(upgradeTime(id, lv)), 'Build time'), why);
+        const cost = upgradeCost(id, lv);
+        kids.push(h('div.res.cost', { title: 'Cost' }, ['gold', 'timber', 'stone'].map((r) => cost[r] ? fact(r === 'gold' ? 'coin' : r, cost[r], r, null, s[r] - (s.reserved[r] || 0) < cost[r] ? 'red' : '') : h('span'))));
+        foot = action(seal(lv === 0 ? 'Restore' : 'Upgrade', () => this.g.upgrade(id), { title: lv === 0 ? 'Restore it' : `To level ${lv + 1}` }),
+          fact('time', dur(upgradeTime(id, lv)), 'Build time'), why);
       }
-      this.focus.set({ head: head('hearth', def.name, badge(lv, `Level ${lv}`), { title: def.blurb }), content: facts(...stats), foot });
+      this.focus.set({ head: head('hearth', def.name, lv === 0 ? hint('Ruin', 'soft') : badge(lv, `Level ${lv}`), { title: def.blurb }), content: kids, foot });
     });
-    if (q && this.qBar) this.qBar.set(q.progress / q.duration, `→ ${lv + 1}`);
+    if (q && this.qBar) this.qBar.set(q.progress / q.duration, dur(q.duration - q.progress));
   }
 
   setHover(key) {
@@ -157,13 +178,15 @@ export class Desk {
 
   refreshBarricades(s) {
     const key = this.hover;
-    this.part('focus', `barr|${s.barricades.join(',')}|${key || ''}|${s.phase}|${s.night}`, () => {
-      const left = BARRICADES - s.barricades.length;
+    this.part('focus', `barr|${s.barricades.join(',')}|${key || ''}|${s.phase}|${s.night}|${barricadeMax(s)}`, () => {
+      const max = barricadeMax(s);
+      const left = max - s.barricades.length;
       let content = null, foot = null;
-      if (s.phase === 'night') foot = hint('Locked until dawn');
+      if (!max) foot = slip('Restore the Workshop', () => { this.g.state.ui.building = 'workshop'; this.g.setView('hearth'); this.g.view.views.hearth.select('workshop'); });
+      else if (s.phase === 'night') foot = hint('Locked until dawn');
       else if (key && s.barricades.includes(key)) foot = hint('Click to remove', 'ink');
       else if (key) {
-        const r = canBlock(s.barricades, key, BARRICADES);
+        const r = canBlock(s.barricades, key, max);
         if (!r.ok) foot = hint(r.reason.includes('seal') ? 'Would seal the village' : left ? 'Not here' : 'None left', 'red', r.reason);
         else {
           const before = routeLengths(s.barricades);
@@ -173,7 +196,7 @@ export class Desk {
           if (rows.length) content = h('div.list', {}, rows); else foot = hint('No change tonight', 'soft', 'Nobody walks this path tonight');
         }
       } else foot = hint(left ? 'Click a path' : 'Click one to remove');
-      this.focus.set({ head: head(null, 'Barricades', h('b.count', {}, left)), content: [pieces(ICON.barr, left, BARRICADES, `${left} of ${BARRICADES} left`), content], foot });
+      this.focus.set({ head: head(null, 'Barricades', h('b.count', {}, max ? left : '–')), content: [max ? pieces(ICON.barr, left, max, `${left} of ${max} left`) : null, content], foot });
     });
   }
 

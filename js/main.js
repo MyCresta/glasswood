@@ -2,11 +2,12 @@
 // the Watch view and the notes on the desk.
 import { Scene, preloadImages } from './render/scene.js';
 import { Desk, slip } from './ui/notes.js';
+import * as kit from './ui/kit.js';
 import { h, dur } from './ui/dom.js';
 import { Audio } from './audio/audio.js';
 import { newGame } from './sim/state.js';
 import { makeEvents, pump, catchUp, callNight, AWAY_GAP } from './sim/time.js';
-import { checkObjectives, queueUpgrade, placeBarricade, removeBarricade, barricadeBlocker } from './sim/village.js';
+import { checkObjectives, queueUpgrade, placeBarricade, removeBarricade, barricadeBlocker, postWorker, unpostWorker } from './sim/village.js';
 import { storageAvailable, saveGame, loadGame, exportCode, parseImport, deleteSave, downloadText } from './persist/save.js';
 import { createTabLock } from './persist/tablock.js';
 import { SPAWNS } from './data/village.js';
@@ -30,7 +31,16 @@ function sound(kind) {
 
 function handleEvents(ev) {
   autoView(ev);
-  for (const e of ev.list) if (e.level === 'attention' || e.level === 'done') game.desk.say(e.level, e.text);
+  for (const e of ev.list) {
+    if (e.cat === 'upgrade') {
+      // a finished building: its new drawing settles in, and the slip says what it brings
+      game.view.sync(game.state, hoverPreview());
+      game.view.views.hearth.celebrate(e.building);
+      game.desk.say('done', `${e.text}. ${e.gain}`);
+      continue;
+    }
+    if (e.level === 'attention' || e.level === 'done') game.desk.say(e.level, e.text);
+  }
   if (ev.list.length || ev.changed) {
     game.desk.refresh();
     game.view.sync(game.state, hoverPreview());
@@ -49,6 +59,8 @@ game.act = (fn) => {
   return r;
 };
 game.upgrade = (id) => game.act((s) => queueUpgrade(s, id));
+game.post = (id) => game.act((s) => postWorker(s, id));
+game.unpost = (id) => game.act((s) => unpostWorker(s, id));
 game.callNight = () => game.act((s, ev) => callNight(s, ev));
 game.edge = (key) => game.act((s) => (s.barricades.includes(key) ? removeBarricade(s, key) : placeBarricade(s, key)));
 
@@ -145,11 +157,15 @@ function runCatchUp() {
   carry.ms = 0;
   handleEvents(ev);
   game.desk.overlay((body, close) => body.append(h('div.stack', {},
-    h('h2', {}, 'While you were away'),
-    h('p.hand.blue', { style: { fontSize: '17px', margin: 0 } }, `${dur(r.elapsed)} passed${r.credited < r.elapsed ? ` (the first ${dur(r.credited)} counted)` : ''}.`),
-    r.interrupted ? h('p.hand.blue', { style: { margin: 0 } }, `Night ${r.interrupted} was called off when you left; it will come again.`) : null,
-    r.nights ? h('p.hand.blue', { style: { margin: 0 } }, `The village held ${r.nights} quiet nights at night ${r.safe} and gathered ${r.gold} gold.`) : h('p.hand.blue', { style: { margin: 0 } }, 'No nights were fought while you were away. Hold a night yourself and later absences will earn gold.'),
-    h('div.row', { style: { marginTop: '6px' } }, h('div.seal', { style: { '--size': '88px' } }, h('button', { type: 'button', onclick: close }, h('span', {}, 'Back to it')))))));
+    h('div.row.between', {}, h('h2', {}, 'While you were away'), h('span.fact', { title: r.credited < r.elapsed ? `Only the first ${dur(r.credited)} count` : '' }, kit.icon('time'), h('b', {}, dur(r.elapsed)))),
+    kit.facts(
+      kit.fact('moon', r.nights, r.nights ? `Quiet nights held at night ${r.safe}` : 'Hold a night yourself, and time away will hold nights too'),
+      kit.fact('coin', `+${r.gold}`, 'Gold'),
+      kit.fact('timber', `+${r.timber || 0}`, 'Timber'),
+      kit.fact('stone', `+${r.stone || 0}`, 'Stone'),
+      r.arrived ? kit.fact('people', `+${r.arrived}`, 'Villagers who settled') : null),
+    r.interrupted ? kit.hint(`Night ${r.interrupted} will come again`, 'soft') : null,
+    h('div.row', { style: { marginTop: '6px' } }, kit.seal('Back', close)))));
   game.saveNow();
   return true;
 }
@@ -218,7 +234,14 @@ function begin(state, fresh) {
   game.view.views.hearth.select(state.ui.building || 'archery');
   applySettings();
   running = true;
-  if (!fresh) runCatchUp();
+  if (state.restarted) {
+    // a save from before the village started in ruins
+    delete state.restarted;
+    game.desk.overlay((body, close) => body.append(h('div.stack', {},
+      h('h2', {}, `${state.village.name}, from the ruins`),
+      kit.hint('The village now starts overgrown, and grows back one building at a time. Your old village could not come along.', 'soft'),
+      h('div.row', { style: { marginTop: '6px' } }, kit.seal('Begin', close)))));
+  } else if (!fresh) runCatchUp();
   game.desk.refresh();
   game.view.sync(state, null);
   game.saveNow();

@@ -1,7 +1,7 @@
 // Advancing time: the fixed-step tick, the live pump and offline catch-up.
 import { STEP, OFFLINE_CAP, OFFLINE_CYCLE, OFFLINE_REWARD, DAY_LENGTH, wallStats } from '../data/village.js';
 import { startNight, stepNight, safeNight, waveGold, dawnReward } from './battle.js';
-import { advanceQueue, checkObjectives } from './village.js';
+import { advanceQueue, checkObjectives, produce, villagerArrives } from './village.js';
 
 const LOG_MAX = 300;
 export const AWAY_GAP = 90; // seconds; longer gaps are treated as time away
@@ -24,6 +24,7 @@ export function tick(state, dt, ev) {
   if (state.paused) return;
   state.time += dt;
   advanceQueue(state, dt, ev);
+  produce(state, dt);
   if (state.phase === 'day') {
     state.phaseT += dt;
     if (state.phaseT >= state.dayLength) startNight(state, ev);
@@ -78,7 +79,11 @@ export function catchUp(state, now, ev) {
     state.battle = null;
   }
   state.time += credited;
+  const before = { timber: state.timber, stone: state.stone };
   advanceQueue(state, credited, ev);
+  produce(state, credited);
+  res.timber = Math.floor(state.timber - before.timber);
+  res.stone = Math.floor(state.stone - before.stone);
   const safe = safeNight(state);
   res.safe = safe;
   if (safe > 0) {
@@ -90,6 +95,8 @@ export function catchUp(state, now, ev) {
     state.stats.offlineNights += nights;
     res.nights = nights;
     res.gold = g;
+    res.arrived = 0;
+    for (let k = 0; k < nights && villagerArrives(state, null); k++) res.arrived += 1;
   }
   state.phase = 'day';
   state.phaseT = 0;

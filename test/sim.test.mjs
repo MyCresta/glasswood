@@ -2,10 +2,14 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { newGame } from '../js/sim/state.js';
 import { WEB, EDGE, edgeKey, buildField, routeFrom, routeForSpawn, canBlock, routeLengths } from '../js/sim/web.js';
-import { SPAWNS, wallStats, archeryStats, DAY_LENGTH, BARRICADES } from '../js/data/village.js';
+import { SPAWNS, wallStats, archeryStats, DAY_LENGTH, START, BUILDINGS } from '../js/data/village.js';
 import { makeEvents, advance, tick, catchUp, callNight, pump } from '../js/sim/time.js';
 import { waveSchedule, waveComposition, safeNight, activeSpawns } from '../js/sim/battle.js';
-import { queueUpgrade, cancelUpgrade, upgradeBlocker, upgradeCost, placeBarricade, removeBarricade } from '../js/sim/village.js';
+import { queueUpgrade, cancelUpgrade, upgradeBlocker, upgradeCost, placeBarricade, removeBarricade, barricadeMax, workers, postWorker, unpostWorker, villagerArrives, production, builders, levelCap } from '../js/sim/village.js';
+import { migrate } from '../js/persist/save.js';
+
+// a village with its Workshop restored to `lv` (for barricade tests)
+const withWorkshop = (s, lv) => { s.buildings.workshop.level = lv; return s; };
 
 const fresh = () => newGame({ seed: 7, now: 0 });
 const ev = (s) => makeEvents(s);
@@ -65,15 +69,24 @@ test('a barricade can never seal the village off', () => {
   assert.equal(canBlock([], edgeKey('c', 'gN'), 99).ok, false);
 });
 
-test('barricades: day only, limited, and they change the night route', () => {
+test('barricades: none until the Workshop is restored', () => {
   const s = fresh();
+  assert.equal(barricadeMax(s), 0);
+  assert.match(placeBarricade(s, edgeKey('a0', 'b15')).reason, /Workshop/);
+  withWorkshop(s, 2);
+  assert.equal(barricadeMax(s), 2);
+  assert.ok(placeBarricade(s, edgeKey('a0', 'b15')).ok);
+});
+
+test('barricades: day only, limited, and they change the night route', () => {
+  const s = withWorkshop(fresh(), 4);
   const k = edgeKey('a0', 'b15');
   assert.equal(placeBarricade(s, k).ok, true);
   assert.equal(placeBarricade(s, k).ok, false, 'not twice');
   assert.equal(s.objectives.flags.barricade, true);
   const others = ['a3|b4', 'a9|b12', 'a6|gS', 'b0|b1'].map((x) => edgeKey(...x.split('|')));
   for (const o of others) placeBarricade(s, o);
-  assert.equal(s.barricades.length, BARRICADES);
+  assert.equal(s.barricades.length, barricadeMax(s));
   const e = ev(s);
   callNight(s, e);
   assert.equal(placeBarricade(s, edgeKey('b2', 'b3')).ok, false, 'not at night');
@@ -83,8 +96,13 @@ test('barricades: day only, limited, and they change the night route', () => {
 
 test('starting state', () => {
   const s = fresh();
-  assert.equal(s.gold, 150);
+  assert.equal(s.gold, START.gold);
+  assert.equal(s.timber, START.timber);
+  assert.equal(s.stone, START.stone);
   assert.equal(s.integrity, 500);
+  assert.deepEqual(s.villagers.map((v) => v.job), ['archery', 'idle']);
+  assert.equal(s.buildings.townhall.level, 0, 'the village starts in ruins');
+  assert.equal(s.buildings.tavern.level, 0);
   assert.equal(s.night, 1);
   assert.equal(s.phase, 'day');
   assert.deepEqual(activeSpawns(1).map((x) => x.id), ['hollow']);
@@ -100,7 +118,7 @@ test('waves are deterministic and grow', () => {
   assert.ok(c9.wolf > 0);
 });
 
-test('the first day ends, and the archers win night 1 untouched', () => {
+test('the first day ends, and one archer wins night 1 untouched', () => {
   const s = fresh();
   const e = ev(s);
   advance(s, 61, e);
@@ -113,7 +131,7 @@ test('the first day ends, and the archers win night 1 untouched', () => {
   assert.equal(s.lastReport.wallDamage, 0);
   assert.equal(s.night, 2);
   assert.equal(s.best, 1);
-  assert.ok(s.gold > 150);
+  assert.ok(s.gold > START.gold);
   assert.equal(s.dayLength, DAY_LENGTH);
 });
 
@@ -151,28 +169,90 @@ test('hold repeats the same night', () => {
   assert.equal(s.lastResult[1], 'won');
 });
 
-test('upgrades reserve gold, respect Town Hall caps and refund on cancel', () => {
+test('restoring and upgrading: costs in three resources, Town Hall caps, refunds', () => {
   const s = fresh();
-  assert.equal(upgradeCost('archery', 1), 40);
-  assert.ok(queueUpgrade(s, 'archery').ok);
-  assert.equal(s.reserved, 40);
-  assert.equal(queueUpgrade(s, 'archery').ok, false, 'one entry per building');
+  assert.match(upgradeBlocker(s, 'archery'), /Town Hall first/, 'nothing grows past level 1 before the Town Hall is restored');
+  assert.deepEqual(upgradeCost('lumber', 0), { gold: 30 });
+  assert.ok(queueUpgrade(s, 'lumber').ok);
+  assert.equal(s.reserved.gold, 30);
+  assert.equal(queueUpgrade(s, 'lumber').ok, false, 'one entry per building');
   assert.ok(cancelUpgrade(s, s.queue[0].id).ok);
-  assert.equal(s.reserved, 0);
-  assert.ok(queueUpgrade(s, 'archery').ok);
-  advance(s, 16, ev(s));
-  assert.equal(s.buildings.archery.level, 2);
-  assert.equal(s.gold, 140, '150 − 40 + 30 objective reward');
-  assert.match(upgradeBlocker(s, 'archery'), /Town Hall to level 2/);
-  assert.match(upgradeBlocker(s, 'farmstead'), /Milestone 4/);
-  s.gold = 10;
-  assert.match(upgradeBlocker(s, 'walls'), /more gold/);
+  assert.equal(s.reserved.gold, 0);
+  assert.ok(queueUpgrade(s, 'lumber').ok);
+  advance(s, BUILDINGS.lumber.levels[1].time + 1, ev(s));
+  assert.equal(s.buildings.lumber.level, 1);
+  assert.equal(workers(s, 'lumber'), 1, 'Bram takes the new post');
+  s.timber = 0;
+  s.gold = 500;
+  assert.match(upgradeBlocker(s, 'townhall'), /more timber/);
+  s.timber = 100;
+  s.gold = 500;
+  assert.ok(queueUpgrade(s, 'townhall').ok);
+  advance(s, BUILDINGS.townhall.levels[1].time + 1, ev(s));
+  assert.equal(levelCap(s, 'archery'), 2);
+  s.gold = 500;
+  assert.equal(upgradeBlocker(s, 'archery'), null);
+});
+
+test('builders: one at first, two from Town Hall level 2', () => {
+  const s = fresh();
+  assert.equal(builders(s), 1);
+  s.buildings.townhall.level = 2;
+  assert.equal(builders(s), 2);
+  Object.assign(s, { gold: 1000, timber: 1000, stone: 1000 });
+  queueUpgrade(s, 'lumber'); queueUpgrade(s, 'quarry');
+  advance(s, 121, ev(s));
+  assert.equal(s.buildings.lumber.level, 1);
+  assert.equal(s.buildings.quarry.level, 1, 'both built at the same time');
+});
+
+test('villagers: jobs, posts and the tower', () => {
+  const s = fresh();
+  s.buildings.lumber.level = 1;
+  assert.ok(postWorker(s, 'lumber').ok);
+  assert.equal(workers(s, 'lumber'), 1);
+  assert.equal(postWorker(s, 'lumber').ok, false, 'no room for another');
+  assert.ok(unpostWorker(s, 'archery').ok);
+  assert.equal(archeryStats(1, workers(s, 'archery')).archers, 0);
+  assert.ok(postWorker(s, 'archery').ok);
+});
+
+test('production: timber and stone from the workers, also while away', () => {
+  const s = fresh();
+  s.buildings.lumber.level = 1;
+  postWorker(s, 'lumber');
+  s.objectives.claimed.push('lumber1');
+  assert.ok(Math.abs(production(s).timber - BUILDINGS.lumber.levels[1].per / 60) < 1e-9);
+  const t = s.timber;
+  catchUp(s, 600 * 1000, ev(s));
+  assert.ok(Math.abs(s.timber - (t + BUILDINGS.lumber.levels[1].per * 10)) < 1e-6);
+});
+
+test('a traveller settles after a night held, if the Tavern has a bed', () => {
+  const s = fresh();
+  runNight(s);
+  assert.equal(s.villagers.length, 2, 'two beds in the ruin');
+  s.buildings.tavern.level = 1;
+  runNight(s);
+  assert.equal(s.villagers.length, 3);
+  assert.equal(villagerArrives(s), true);
+  assert.equal(villagerArrives(s), false, 'four beds');
+});
+
+test('a save from before the ruins starts the village again, keeping its name', () => {
+  const old = { version: 3, village: { name: 'Mossbank' }, buildings: { archery: { level: 7 } }, gold: 900, settings: { sound: false } };
+  const s = migrate(old);
+  assert.equal(s.village.name, 'Mossbank');
+  assert.equal(s.buildings.archery.level, 1);
+  assert.equal(s.settings.sound, false);
+  assert.equal(s.restarted, true);
 });
 
 test('walls upgrade raises integrity', () => {
   const s = fresh();
+  s.buildings.townhall.level = 1;
   queueUpgrade(s, 'walls');
-  advance(s, 21, ev(s));
+  advance(s, BUILDINGS.walls.levels[2].time + 1, ev(s));
   assert.equal(s.buildings.walls.level, 2);
   assert.equal(s.integrity, wallStats(2).integrity);
 });
@@ -195,10 +275,10 @@ test('offline: safe-night rewards, 24h cap, no losses, no double credit', () => 
 
 test('offline before any won night gives no night rewards; upgrades still finish', () => {
   const s = fresh();
-  queueUpgrade(s, 'walls');
+  queueUpgrade(s, 'lumber');
   const r = catchUp(s, 3600 * 1000, ev(s));
   assert.equal(r.nights, 0);
-  assert.equal(s.buildings.walls.level, 2);
+  assert.equal(s.buildings.lumber.level, 1);
 });
 
 test('an interrupted night is abandoned without loss', () => {
@@ -245,8 +325,10 @@ test('deterministic, and survives JSON round-trips mid-night', () => {
   assert.equal(mid.battle?.kills, copy.battle?.kills);
 });
 
-test('archery stats grow as described', () => {
-  assert.equal(archeryStats(5).shots, 2);
-  assert.equal(archeryStats(10).pierce, true);
-  assert.ok(archeryStats(3).range > archeryStats(1).range);
+test('every tower level is a milestone', () => {
+  assert.equal(archeryStats(1).slots, 1);
+  assert.ok(archeryStats(2).range > archeryStats(1).range);
+  assert.ok(archeryStats(4).dmg > archeryStats(3).dmg * 1.3, 'fire arrows');
+  assert.equal(archeryStats(6).shots, 2);
+  for (const b of Object.values(BUILDINGS)) for (const [i, L] of b.levels.entries()) if (i > b.start) assert.ok(L.cost && L.time && L.gain, `${b.name} ${i}`);
 });

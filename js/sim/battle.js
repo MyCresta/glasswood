@@ -6,6 +6,7 @@ import {
 } from '../data/village.js';
 import { routeForSpawn } from './web.js';
 import { availableGold, uid } from './state.js';
+import { workers, villagerArrives } from './village.js';
 
 const ARROW_SPEED = 18;
 const FX_MAX = 80;
@@ -189,7 +190,7 @@ function stepEnemies(state, b, dt) {
 }
 
 function pickTargets(state, b, count) {
-  const st = archeryStats(state.buildings.archery.level);
+  const st = archeryStats(state.buildings.archery.level, workers(state, 'archery'));
   const mode = state.buildings.archery.target || 'first';
   const cands = b.enemies.filter((e) => e.hp - e.pending > 0 && Math.hypot(e.x, e.z) <= st.range);
   const prog = (e) => remainingDistance(b, e);
@@ -200,7 +201,8 @@ function pickTargets(state, b, count) {
 }
 
 function stepArchers(state, b, dt) {
-  const st = archeryStats(state.buildings.archery.level);
+  const st = archeryStats(state.buildings.archery.level, workers(state, 'archery'));
+  if (!st.archers) return; // nobody on the tower
   const [tx, tz] = BUILDINGS.archery.pos;
   b.cd -= dt;
   if (b.cd > 0) return;
@@ -210,7 +212,7 @@ function stepArchers(state, b, dt) {
     t.pending += st.dmg;
     b.shots.push({ id: uid(state, 'a'), x: tx, z: tz, px: tx, pz: tz, sx: tx, sz: tz, tid: t.id, lx: t.x, lz: t.z, dmg: st.dmg, pierce: st.pierce, travelled: 0 });
   }
-  b.cd += 1 / st.rate;
+  b.cd += 1 / (st.rate * st.archers);
 }
 
 function damage(state, b, e, amount) {
@@ -291,6 +293,7 @@ export function endNight(state, won, ev) {
     if (!state.hold) state.night = n + 1;
     ev.emit('done', `Night ${n} held. +${b.gold + reward} gold${record && n > 1 ? '. New best' : ''}`, { cat: 'night', record });
     ev.sound?.('dawn');
+    report.arrived = villagerArrives(state, ev);
   } else {
     const lost = Math.floor(availableGold(state) * 0.1);
     state.gold -= lost;
