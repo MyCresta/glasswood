@@ -21,15 +21,25 @@ button:disabled { cursor: not-allowed; }
 
 #app { position: fixed; inset: 0; }
 #stage { position: absolute; inset: 0; }
-#scene, #scene-top { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
-#scene { touch-action: none; }
+/* the desk is a stack of SVG layers sharing one coordinate space, so each can
+   move or fade without the others being redrawn */
+#stage > svg { position: absolute; inset: 0; width: 100%; height: 100%; display: block; will-change: transform; }
+/* the notes get their own layers too, so a moving glass never repaints them */
+.col { will-change: transform; }
+#stage { touch-action: none; }
+#stage > svg.wilds-svg { transition: opacity .45s ease; }
+#stage > svg.wilds-svg.off { opacity: 0; pointer-events: none; }
+#stage > svg.rig-svg, #stage > svg.shade-svg { pointer-events: none; }
+#stage > svg.rig-svg.settled .live-root { pointer-events: auto; }
+#stage > svg.rig-svg:not(.settled) * { pointer-events: none !important; }
+#stage > svg.frame-svg { pointer-events: none; z-index: 5; }
+#stage > svg.off-stage { display: none; }
 /* the glasses lie on top of the notes */
-#scene-top { pointer-events: none; z-index: 5; }
 #news { z-index: 20; }
-#scene .hit { cursor: pointer; }
-#scene .edge-hit { stroke: transparent; stroke-width: 14; fill: none; cursor: pointer; pointer-events: stroke; }
-#scene .edge-hit:hover + .edge-hint, #scene .edge-hint.on { opacity: 1; }
-body.night #scene .edge-hit { pointer-events: none; }
+#stage .hit { cursor: pointer; }
+#stage .edge-hit { stroke: transparent; stroke-width: 14; fill: none; cursor: pointer; pointer-events: stroke; }
+#stage .edge-hit:hover + .edge-hint, #stage .edge-hint.on { opacity: 1; }
+body.night #stage .edge-hit { pointer-events: none !important; }
 
 /* columns of notes on either side of the globe */
 .col { position: absolute; top: 18px; bottom: 18px; display: flex; flex-direction: column; gap: 18px; pointer-events: none; }
@@ -152,14 +162,11 @@ h1, h2, h3 { font-family: var(--fr); font-weight: 400; margin: 0; line-height: 1
 body.reduced-motion #news .item { animation: none; }
 
 /* ---------- views: the lenses slide in and out ---------- */
-#scene .layer { transition: opacity .45s ease; }
-#scene .layer.off { opacity: 0; pointer-events: none; }
-#scene .rig:not(.settled) { pointer-events: none; }
-body.reduced-motion #scene .layer { transition: none; }
-#scene .hit:focus-visible { outline: none; stroke: #ffe08a; stroke-width: 2; }
+body.reduced-motion #stage > svg.wilds-svg { transition: none; }
+#stage .hit:focus-visible { outline: none; stroke: #ffe08a; stroke-width: 2; }
 
 /* ---------- notes lie on the desk: candle light from the upper right ---------- */
-.note { filter: drop-shadow(-1px 1.5px 0 #7a6040) drop-shadow(-1px 1.5px 0 #5a4428) drop-shadow(-1px 1.5px 0 #3a2a18) drop-shadow(-10px 14px 14px rgba(0,0,0,.6)); }
+.note { filter: drop-shadow(-2px 3px 0 #4a3420) drop-shadow(-10px 14px 14px rgba(0,0,0,.6)); }
 .sheet::after { content: ''; position: absolute; inset: 0; pointer-events: none;
   background: radial-gradient(ellipse at 100% 0%, rgba(255,214,150,.20), transparent 55%), radial-gradient(ellipse at 50% 50%, transparent 55%, rgba(40,20,8,.22)); }
 #left .sheet::after { background: radial-gradient(ellipse at 100% 0%, rgba(255,214,150,.10), transparent 50%), radial-gradient(ellipse at 50% 50%, transparent 45%, rgba(30,15,6,.32)), linear-gradient(90deg, rgba(20,10,4,.18), transparent 60%); }

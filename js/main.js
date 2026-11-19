@@ -1,6 +1,6 @@
 // Glasswood: boot, the game loop, saving and the link between simulation,
 // the Watch view and the notes on the desk.
-import { Scene } from './render/scene.js';
+import { Scene, preloadImages } from './render/scene.js';
 import { Desk, slip } from './ui/notes.js';
 import { h, dur } from './ui/dom.js';
 import { Audio } from './audio/audio.js';
@@ -196,6 +196,7 @@ function keys(e) {
 
 function begin(state, fresh) {
   game.state = state;
+  preloadImages();
   game.view = new Scene(document.getElementById('scene'), {
     onEdge: (key) => { if (game.state.phase === 'day') game.edge(key); else game.desk.say('attention', 'Barricades can only be moved by day.'); },
     onEdgeHover: (key) => { hoverKey = key; game.desk.setHover(key); game.view.sync(game.state, hoverPreview()); },

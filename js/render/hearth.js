@@ -13,6 +13,7 @@ export class HearthView {
     const live = svgEl('g', { 'clip-path': 'url(#hearthclip)' }, root);
     this.tint = svgEl('ellipse', { cx: HEARTH.cx, cy: HEARTH.cy, rx: HEARTH.rx, ry: HEARTH.ry, fill: '#140f3a', opacity: 0, 'pointer-events': 'none' }, live);
     this.marks = svgEl('g', {}, live);
+    this.tags = svgEl('g', { 'pointer-events': 'none' }, live);
     this.hits = svgEl('g', {}, live);
     this.label = svgEl('g', { 'pointer-events': 'none', opacity: 0 }, root);
     this.labelRect = svgEl('rect', { height: 24, fill: '#d9bf8c', stroke: '#5a4428', 'stroke-width': 0.8 }, this.label);
@@ -24,9 +25,7 @@ export class HearthView {
         const r = svgEl('rect', { x: x - hw, y: y - hh, width: hw * 2, height: hh + 8, fill: 'transparent', class: 'hit', role: 'button', tabindex: 0, 'aria-label': BUILDINGS[id]?.name || id }, this.hits);
         r.addEventListener('click', () => this.onBuilding?.(id));
         r.addEventListener('keydown', (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); this.onBuilding?.(id); } });
-        r.addEventListener('pointerenter', () => this.showLabel(id, x, y - hh - 6));
         r.addEventListener('focus', () => this.showLabel(id, x, y - hh - 6));
-        r.addEventListener('pointerleave', () => this.label.setAttribute('opacity', 0));
         r.addEventListener('blur', () => this.label.setAttribute('opacity', 0));
       }
     }
@@ -50,7 +49,27 @@ export class HearthView {
     }
   }
 
-  sync() {}
+  // a small paper tag at the foot of each working building, with its level
+  sync(state) {
+    const key = Object.keys(HOTSPOTS).map((id) => `${id}${state.buildings[id]?.level ?? 0}`).join('|');
+    if (key === this.tagKey) return;
+    this.tagKey = key;
+    this.tags.replaceChildren();
+    for (const [id, spots] of Object.entries(HOTSPOTS)) {
+      const [x, y] = spots[0];
+      const name = BUILDINGS[id]?.name || id;
+      const lv = state.buildings[id]?.level ?? 0;
+      const w = name.length * 7.6 + 46;
+      const g = svgEl('g', { transform: `translate(${f1(x)} ${f1(y + 8)}) rotate(${id.length % 2 ? -1.5 : 1.5})` }, this.tags);
+      svgEl('rect', { x: -w / 2 + 1.5, y: 2, width: w, height: 22, fill: '#000', opacity: 0.35 }, g);
+      svgEl('rect', { x: -w / 2, y: 0, width: w, height: 22, fill: '#d9bf8c', stroke: '#5a4428', 'stroke-width': 0.8 }, g);
+      svgEl('circle', { cx: -w / 2 + 13, cy: 11, r: 8.5, fill: '#9e3426', stroke: '#5c1520' }, g);
+      const n = svgEl('text', { x: -w / 2 + 13, y: 15, 'text-anchor': 'middle', 'font-family': 'Fraunces, Georgia, serif', 'font-size': 11.5, 'font-weight': 600, fill: '#f6e2c0' }, g);
+      n.textContent = lv;
+      const t = svgEl('text', { x: -w / 2 + 27, y: 16, 'font-family': 'Kalam, cursive', 'font-size': 14, fill: '#23170f' }, g);
+      t.textContent = name;
+    }
+  }
 
   frame(dt, state, nightF, reduced) {
     this.t = (this.t || 0) + dt;
