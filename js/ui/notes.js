@@ -3,7 +3,8 @@
 import { h, dur } from './dom.js';
 import { BUILDINGS, ENEMIES, SPAWNS, BARRICADES, archeryStats, wallStats } from '../data/village.js';
 import { nightPreview } from '../sim/battle.js';
-import { upgradeBlocker, upgradeCost, OBJECTIVES } from '../sim/village.js';
+import { upgradeBlocker, upgradeCost, upgradeTime, OBJECTIVES } from '../sim/village.js';
+import { LOCATIONS, LOCATION_KINDS } from '../data/world.js';
 import { canBlock, routeLengths, EDGE } from '../sim/web.js';
 
 // A torn edge for a sheet of paper, as a clip-path, the same every time for an id.
@@ -37,7 +38,7 @@ function note(id, { rot = 0, tone = '', cut, tape, pin, stain, label } = {}) {
 }
 
 const seal = (label, onClick, size = 96) => h('div.seal', { style: { '--size': `${size}px` } }, h('button', { type: 'button', onclick: onClick }, h('span', { html: label })));
-const slip = (label, onClick, attrs = {}) => h('div.slip', {}, h('button', { type: 'button', onclick: onClick, ...attrs }, label));
+export const slip = (label, onClick, attrs = {}) => h('div.slip', {}, h('button', { type: 'button', onclick: onClick, ...attrs }, label));
 const COIN = '<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="13" r="9" fill="#7a5418"/><circle cx="12" cy="11" r="9" fill="#e0a93a" stroke="#7a5418" stroke-width="1.5"/><circle cx="12" cy="11" r="5.5" fill="none" stroke="#7a5418" stroke-width="1.2"/></svg>';
 const BARR = '<svg viewBox="0 0 46 30" aria-hidden="true"><rect x="3" y="11" width="40" height="9" rx="2" fill="#a07a4e" stroke="#23170f" stroke-width="1.5"/><path d="M9 4 L15 27 M31 4 L37 27" stroke="#5a3e22" stroke-width="4" stroke-linecap="round"/></svg>';
 const ICONS = {
@@ -65,17 +66,23 @@ export class Desk {
     this.goldEl = h('span');
     this.packet.body.append(h('div.ruled.row.between', {}, h('div.stack', { style: { gap: '2px' } }, this.nameEl, this.subEl), h('div.coin', { title: 'Gold' }, h('span', { html: COIN }), this.goldEl)));
     // the view card
+    this.viewBtns = {};
     const views = h('nav.views', { 'aria-label': 'Views' }, h('div.leather', {}, h('div.stitch', {},
-      [['wilds', 'Wilds', 'the whole globe', '1', false], ['watch', 'Watch', 'the reading glass', '2', true], ['hearth', 'Hearth', 'the big loupe', '3', false]].map(([id, name, hint, key, on]) => h('button.view-btn', {
-        type: 'button', 'aria-current': on ? 'true' : 'false', disabled: !on, title: on ? `${name} (${key})` : `${name}: coming in a later update`,
-      }, h('span', { html: ICONS[id] }), h('span', {}, h('span.vname', {}, name), h('span.vhint', {}, on ? hint : 'coming soon')), h('span.key', {}, key))))));
+      [['wilds', 'Wilds', 'the whole globe', '1'], ['watch', 'Watch', 'the reading glass', '2'], ['hearth', 'Hearth', 'the big loupe', '3']].map(([id, name, hint, key]) => {
+        const btn = h('button.view-btn', { type: 'button', 'aria-current': 'false', title: `${name} (${key})`, onclick: () => g.setView(id) },
+          h('span', { html: ICONS[id] }), h('span', {}, h('span.vname', {}, name), h('span.vhint', {}, hint)), h('span.key', {}, key));
+        this.viewBtns[id] = btn;
+        return btn;
+      }))));
     // the current task
     this.task = note('task', { rot: 1.4, tone: 'older', pin: true, label: 'Current task' });
     // the log
     this.logNote = note('log', { rot: -1, tone: 'mid', label: 'Log' });
     this.logList = h('ul.log', { 'aria-live': 'polite' });
     this.logNote.body.append(h('h3', {}, 'The watch log'), this.logList);
-    this.left.append(this.packet.root, views, this.task.root, this.logNote.root);
+    const gear = '<svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="#3a2410" stroke-width="1.8"><circle cx="12" cy="12" r="3.2"/><path d="M12 2.5v3M12 18.5v3M2.5 12h3M18.5 12h3M5.3 5.3l2.1 2.1M16.6 16.6l2.1 2.1M5.3 18.7l2.1-2.1M16.6 7.4l2.1-2.1"/></svg>';
+    const settings = h('button.settings-btn', { type: 'button', onclick: () => g.openSettings(), title: 'Settings (O)' }, h('span.knob', { html: gear }), h('span.hand', {}, 'Settings'));
+    this.left.append(this.packet.root, views, this.task.root, this.logNote.root, settings);
 
     // the night note
     this.night = note('night', { rot: 1.2, cut: 'tr', tape: true, stain: [250, 200], label: 'The night' });
@@ -83,7 +90,10 @@ export class Desk {
     this.village = note('village', { rot: -1.4, tone: 'mid', label: 'Village defences' });
     // barricades
     this.barr = note('barricades', { rot: 1.6, tone: 'older', pin: true, label: 'Barricades' });
-    this.right.append(this.night.root, this.village.root, this.barr.root);
+    // a place in the Wilds, and a building in Hearth
+    this.place = note('place', { rot: -1.2, cut: 'tr', tape: true, stain: [230, 160], label: 'A place in the globe' });
+    this.building = note('building', { rot: -1.1, cut: 'tr', tape: true, stain: [220, 210], label: 'A building' });
+    this.right.append(this.night.root, this.place.root, this.building.root, this.village.root, this.barr.root);
     this.sig = {};
     this.hover = null;
   }
@@ -101,6 +111,14 @@ export class Desk {
     this.subEl.textContent = `Town Hall ${s.buildings.townhall.level}${s.best ? `, best night ${s.best}` : ', no nights held yet'}`;
     this.goldEl.textContent = Math.floor(s.gold - s.reserved);
     document.body.classList.toggle('night', s.phase === 'night');
+    const v = s.ui.view;
+    for (const [id, btn] of Object.entries(this.viewBtns)) btn.setAttribute('aria-current', id === v ? 'true' : 'false');
+    this.place.root.hidden = v !== 'wilds';
+    this.building.root.hidden = v !== 'hearth';
+    this.barr.root.hidden = v !== 'watch';
+    this.village.root.hidden = v === 'wilds';
+    if (v === 'wilds') this.refreshPlace(s);
+    if (v === 'hearth') this.refreshBuilding(s);
     this.refreshTask(s);
     this.refreshLog(s);
     this.refreshNight(s);
@@ -201,6 +219,56 @@ export class Desk {
       }
     });
     for (const { bar, q } of Object.values(this.qBars || {})) bar.style.width = `${Math.min(100, (q.progress / q.duration) * 100).toFixed(1)}%`;
+  }
+
+  refreshPlace(s) {
+    const id = s.ui.place || null;
+    this.part('place', `${id}|${s.village.name}`, () => {
+      const b = this.place.body;
+      b.replaceChildren();
+      const l = LOCATIONS.find((x) => x.id === id);
+      if (!l) {
+        b.append(h('div.stack', {}, h('h2', {}, 'The Wilds'), h('p.hand.blue', { style: { margin: 0, fontSize: '17px', lineHeight: 1.45 } }, 'The whole world inside the globe: friendly villages, ruins, and dungeons the creatures crawl out of. Click a paper tag to read about a place.'), h('p.hand', { style: { margin: 0 } }, 'Expeditions to these places come with the villager cards.')));
+        return;
+      }
+      const name = l.kind === 'home' ? s.village.name : l.name;
+      const danger = l.difficulty ? h('span', {}, 'Danger ', h('b', { style: { color: '#9e3426', letterSpacing: '2px' } }, '◆'.repeat(l.difficulty)), h('span', { style: { color: 'rgba(90,62,38,.35)', letterSpacing: '2px' } }, '◆'.repeat(5 - l.difficulty))) : null;
+      b.append(h('div.ruled.stack', {},
+        h('h2', {}, name),
+        h('span.hand', {}, l.kind === 'home' ? 'your village, under the reading glass' : LOCATION_KINDS[l.kind].name.toLowerCase()),
+        h('p', { style: { margin: 0, lineHeight: 1.45 } }, l.blurb),
+        l.kind !== 'home' ? h('div.small.stack', { style: { gap: '4px' } }, danger, l.hours ? h('span', {}, `About ${Math.round(l.hours * 60)} minutes there and back`) : null, l.rewards ? h('span', {}, `Brings back ${l.rewards.join(', ').toLowerCase()}`) : null) : null,
+        l.kind === 'home' ? slip('Look through the reading glass', () => this.g.setView('watch')) : h('p.hand', { style: { margin: 0, color: '#8a2e22' } }, 'Expeditions arrive with the villager cards in a coming update.')));
+    });
+  }
+
+  refreshBuilding(s) {
+    const id = s.ui.building || 'archery';
+    const def = BUILDINGS[id];
+    const lv = s.buildings[id]?.level ?? 0;
+    const bl = def.upgradable ? upgradeBlocker(s, id) || '' : '';
+    const q = s.queue.find((x) => x.bid === id);
+    this.part('building', `${id}|${lv}|${bl.startsWith('Needs') ? 'gold' : bl}|${q ? q.id : ''}`, () => {
+      const b = this.building.body;
+      b.replaceChildren();
+      let stat = null;
+      if (id === 'archery') { const st = archeryStats(lv); stat = `${st.dmg.toFixed(1)} damage, reach ${st.range.toFixed(1)}, ${st.rate.toFixed(2)} shots a second, ${st.archers || 2 + Math.floor(lv / 2)} archers on the walk.`; }
+      if (id === 'walls') { const st = wallStats(lv); stat = `${st.integrity} strength, armour ${st.armor}. Repaired at every dawn.`; }
+      if (id === 'townhall') stat = `Lets every other building grow to level ${lv * 2}.`;
+      const head = def.upgradable ? `level ${lv}` : lv >= 1 ? 'standing' : 'a ruin';
+      const kids = [h('h2', {}, def.name), h('span.hand', {}, head), h('p', { style: { margin: 0, lineHeight: 1.45 } }, def.blurb)];
+      if (stat) kids.push(h('p.small', { style: { margin: 0 } }, stat));
+      if (def.upgradable) {
+        const cost = upgradeCost(id, lv);
+        const verb = { archery: 'Train the archers', walls: 'Strengthen the walls', townhall: 'Raise the Town Hall' }[id];
+        if (q) kids.push(h('p.hand.blue', { style: { margin: 0 } }, q === s.queue[0] ? 'The builders are on it.' : 'Waiting for the builders.'));
+        else if (cost) {
+          kids.push(h('span.small', {}, `${cost} gold and ${dur(upgradeTime(id, lv))} of work`));
+          kids.push(h('div.row', { style: { marginTop: '4px', gap: '14px' } }, seal(verb.split(' ')[0] === 'Raise' ? 'Raise' : verb.split(' ')[0], () => this.g.upgrade(id), 86), bl ? h('span.hand', { style: { color: '#8a2e22' } }, bl) : h('span.hand', {}, `to level ${lv + 1}`)));
+        } else kids.push(h('p.hand', { style: { margin: 0 } }, 'As strong as it gets.'));
+      } else if (def.later) kids.push(h('p.hand', { style: { margin: 0, color: '#8a2e22' } }, def.later));
+      b.append(h('div.ruled.stack', {}, ...kids));
+    });
   }
 
   setHover(key) {

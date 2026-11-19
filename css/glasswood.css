@@ -145,3 +145,35 @@ h1, h2, h3 { font-family: var(--fr); font-weight: 400; margin: 0; line-height: 1
 }
 @media (prefers-reduced-motion: reduce) { #news .item { animation: none; } .bar > span { transition: none; } }
 body.reduced-motion #news .item { animation: none; }
+
+/* ---------- views: the lenses slide in and out ---------- */
+#scene .layer { transition: opacity .55s ease, transform .7s cubic-bezier(.2,.8,.2,1); }
+#scene .layer.off { opacity: 0; pointer-events: none; }
+#scene .layer.watch.off { transform: translate(240px, 300px) rotate(6deg); }
+#scene .layer.hearth.off { transform: translate(260px, -320px) rotate(-4deg); }
+body.reduced-motion #scene .layer { transition: opacity .2s; transform: none !important; }
+@media (prefers-reduced-motion: reduce) { #scene .layer { transition: opacity .2s; transform: none !important; } }
+#scene .hit:focus-visible { outline: none; stroke: #ffe08a; stroke-width: 2; }
+
+/* ---------- notes lie on the desk: candle light from the upper right ---------- */
+.note { filter: drop-shadow(-1px 1.5px 0 #7a6040) drop-shadow(-1px 1.5px 0 #5a4428) drop-shadow(-1px 1.5px 0 #3a2a18) drop-shadow(-10px 14px 14px rgba(0,0,0,.6)); }
+.sheet::after { content: ''; position: absolute; inset: 0; pointer-events: none;
+  background: radial-gradient(ellipse at 100% 0%, rgba(255,214,150,.20), transparent 55%), radial-gradient(ellipse at 50% 50%, transparent 55%, rgba(40,20,8,.22)); }
+#left .sheet::after { background: radial-gradient(ellipse at 100% 0%, rgba(255,214,150,.10), transparent 50%), radial-gradient(ellipse at 50% 50%, transparent 45%, rgba(30,15,6,.32)), linear-gradient(90deg, rgba(20,10,4,.18), transparent 60%); }
+#left > :nth-child(1) { margin-left: 4px; }
+#left > :nth-child(3) { margin-left: 14px; width: calc(100% - 10px); }
+#left > :nth-child(4) { margin-left: -2px; }
+#right > section:nth-of-type(2) { margin-right: 10px; }
+#right > section:nth-of-type(4) { margin-right: -4px; }
+
+/* the settings knob */
+.settings-btn { display: flex; align-items: center; gap: 10px; background: none; border: 0; padding: 4px; margin-top: auto; align-self: flex-start; color: #d9c49a; min-height: 48px; }
+.settings-btn .knob { width: 44px; height: 44px; border-radius: 50%; display: grid; place-items: center;
+  background: radial-gradient(circle at 35% 30%, #f6dca0, #b8853e 55%, #6e4a1c); box-shadow: 0 3px 0 #3a2410, -4px 8px 10px rgba(0,0,0,.55); }
+.settings-btn .knob svg { width: 24px; height: 24px; }
+.settings-btn:hover .knob { filter: brightness(1.1); }
+.settings-btn .hand { color: #d9c49a; font-size: 17px; }
+.close { background: none; border: 0; font-size: 30px; line-height: 1; color: var(--ink-soft); width: 40px; height: 40px; }
+.slider { display: grid; grid-template-columns: 150px 1fr; align-items: center; gap: 10px; font-size: 15px; }
+.slider input { accent-color: var(--red); }
+#overlay .note { width: min(480px, 94vw); max-height: 92vh; overflow: auto; }

@@ -1,7 +1,6 @@
 // The Watch view: the reading glass over the forest. The artwork under and over
 // the glass is pre-drawn (assets/); this module draws everything that changes:
 // burrow glows and tags, tonight's routes, barricades, creatures and arrows.
-import { DEFS } from './defs.js';
 import { NODES } from '../data/web.js';
 import { SPAWNS, ENEMIES, archeryStats } from '../data/village.js';
 import { WEB, EDGE, routeForSpawn, edgeKey } from '../sim/web.js';
@@ -11,35 +10,29 @@ const NS = 'http://www.w3.org/2000/svg';
 export const LENS = { x: 630, y: 410, r: 350 };
 const S = 10.4;
 export const T = (x, z) => [LENS.x + x * S, LENS.y + z * S];
-const VIEW_DESK = `${LENS.x - 720} 0 1440 900`; // the glass in the middle of the screen
-const VIEW_GLASS = `${LENS.x - 372} ${LENS.y - 372} 744 744`;
 const TOWER_TOP = T(0, 0);
 
-const svgEl = (tag, attrs = {}, parent) => {
+export const svgEl = (tag, attrs = {}, parent) => {
   const el = document.createElementNS(NS, tag);
   for (const [k, v] of Object.entries(attrs)) el.setAttribute(k, v);
   if (parent) parent.appendChild(el);
   return el;
 };
-const f1 = (n) => Math.round(n * 10) / 10;
+export const f1 = (n) => Math.round(n * 10) / 10;
 
 function pathD(pts) {
   return pts.map(([x, z], i) => { const [X, Y] = T(x, z); return `${i ? 'L' : 'M'}${f1(X)} ${f1(Y)}`; }).join(' ');
 }
 
 export class WatchView {
-  constructor(svg, { onEdge, onEdgeHover, onSpawn, onFx } = {}) {
-    this.svg = svg;
+  constructor(root, { onEdge, onEdgeHover, onSpawn, onFx } = {}) {
+    this.root = root;
     this.onFx = onFx;
     this.onEdge = onEdge;
     this.onEdgeHover = onEdgeHover;
     this.onSpawn = onSpawn;
-    svg.setAttribute('viewBox', VIEW_DESK);
-    svg.setAttribute('preserveAspectRatio', 'xMidYMid meet');
-    svg.innerHTML = `${DEFS}<defs><clipPath id="lensclip"><circle cx="${LENS.x}" cy="${LENS.y}" r="${LENS.r}"/></clipPath>
-      <radialGradient id="routeglow"><stop offset="0" stop-color="#ffe08a" stop-opacity=".9"/><stop offset="1" stop-color="#ffe08a" stop-opacity="0"/></radialGradient></defs>`;
-    svgEl('image', { href: 'assets/watch-base.webp', x: 0, y: 0, width: 1440, height: 900 }, svg);
-    this.live = svgEl('g', { 'clip-path': 'url(#lensclip)' }, svg);
+    svgEl('image', { href: 'assets/watch.webp', x: 0, y: 0, width: 1440, height: 900 }, root);
+    this.live = svgEl('g', { 'clip-path': 'url(#lensclip)' }, root);
     this.nightTint = svgEl('circle', { cx: LENS.x, cy: LENS.y, r: LENS.r, fill: '#1a1450', opacity: 0 }, this.live);
     this.glows = svgEl('g', {}, this.live);
     this.routes = svgEl('g', {}, this.live);
@@ -50,23 +43,15 @@ export class WatchView {
     this.creatures = svgEl('g', {}, this.live);
     this.arrows = svgEl('g', {}, this.live);
     this.fireflies = svgEl('g', {}, this.live);
-    svgEl('image', { href: 'assets/watch-glass.svg', x: 0, y: 0, width: 1440, height: 900, 'pointer-events': 'none' }, svg);
-    this.deskDark = svgEl('rect', { x: -2000, y: -2000, width: 6000, height: 6000, fill: '#05030a', opacity: 0, 'pointer-events': 'none' }, svg);
-    this.tags = svgEl('g', {}, svg);
+    this.puffLayer = svgEl('g', {}, this.live);
+    svgEl('image', { href: 'assets/watch-glass.svg', x: 0, y: 0, width: 1440, height: 900, 'pointer-events': 'none' }, root);
+    this.tags = svgEl('g', {}, root);
     this.sprites = new Map();
     this.arrowEls = new Map();
     this.routeKey = null;
     this.t = 0;
     this.buildEdges();
     this.buildFireflies();
-    this.fit();
-    window.addEventListener('resize', () => this.fit());
-  }
-
-  // On narrow or tall screens show only the glass.
-  fit() {
-    const narrow = window.matchMedia('(max-width: 820px), (max-aspect-ratio: 1/1)').matches;
-    this.svg.setAttribute('viewBox', narrow ? VIEW_GLASS : VIEW_DESK);
   }
 
   // Invisible fat strokes along every path, for clicking and hovering.
@@ -178,10 +163,10 @@ export class WatchView {
     }
   }
 
-  frame(dt, state, alpha, nightF, reducedMotion) {
+  frame(dt, state, alpha, nightF, reducedMotion, hidden = false) {
     this.t += dt;
+    if (hidden) { this.drawFx(state.battle, dt); return; }
     this.nightTint.setAttribute('opacity', (0.32 * nightF).toFixed(3));
-    this.deskDark.setAttribute('opacity', (0.32 * nightF).toFixed(3));
     this.range.setAttribute('opacity', state.battle ? 1 : 0);
     // marching dots along tonight's routes
     if (this.routeDots?.length) {
@@ -219,7 +204,6 @@ export class WatchView {
         else if (f.kind === 'hit') this.puffs.push({ x: X, y: Y - 10, vx: 0, vy: -10, life: 0.25, c: '#f3e2bf', r: 3 });
       }
     } else this.seenFx = 0;
-    this.puffLayer ||= svgEl('g', { 'clip-path': 'url(#lensclip)' }, this.svg.insertBefore(svgEl('g'), this.tags));
     this.puffs = this.puffs.filter((p) => (p.life -= dt) > 0).slice(-120);
     while (this.puffLayer.childElementCount < this.puffs.length) svgEl('circle', {}, this.puffLayer);
     while (this.puffLayer.childElementCount > this.puffs.length) this.puffLayer.lastChild.remove();

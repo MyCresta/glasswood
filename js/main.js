@@ -1,13 +1,13 @@
 // Glasswood: boot, the game loop, saving and the link between simulation,
 // the Watch view and the notes on the desk.
-import { WatchView } from './render/watch.js';
-import { Desk } from './ui/notes.js';
+import { Scene } from './render/scene.js';
+import { Desk, slip } from './ui/notes.js';
 import { h, dur } from './ui/dom.js';
 import { Audio } from './audio/audio.js';
 import { newGame } from './sim/state.js';
 import { makeEvents, pump, catchUp, callNight, AWAY_GAP } from './sim/time.js';
 import { checkObjectives, queueUpgrade, placeBarricade, removeBarricade, barricadeBlocker } from './sim/village.js';
-import { storageAvailable, saveGame, loadGame } from './persist/save.js';
+import { storageAvailable, saveGame, loadGame, exportCode, parseImport, deleteSave, downloadText } from './persist/save.js';
 import { createTabLock } from './persist/tablock.js';
 import { SPAWNS } from './data/village.js';
 
@@ -29,6 +29,7 @@ function sound(kind) {
 }
 
 function handleEvents(ev) {
+  autoView(ev);
   for (const e of ev.list) if (e.level === 'attention' || e.level === 'done') game.desk.say(e.level, e.text);
   if (ev.list.length || ev.changed) {
     game.desk.refresh();
@@ -51,6 +52,73 @@ game.upgrade = (id) => game.act((s) => queueUpgrade(s, id));
 game.callNight = () => game.act((s, ev) => callNight(s, ev));
 game.edge = (key) => game.act((s) => (s.barricades.includes(key) ? removeBarricade(s, key) : placeBarricade(s, key)));
 
+// ---------- views ----------
+game.setView = (name, auto = false) => {
+  const s = game.state;
+  if (!auto) s.ui.autoReturn = null;
+  s.ui.view = name;
+  game.view.setView(name);
+  game.view.sync(s, hoverPreview());
+  game.desk.refresh();
+  if (!auto) {
+    game.touch();
+    const sc = document.getElementById('scene');
+    if (sc.getBoundingClientRect().top < -40) sc.scrollIntoView({ behavior: game.state.settings.reducedMotion ? 'auto' : 'smooth', block: 'start' });
+  }
+};
+// Move to the Watch at dusk, and back to where you were a moment after dawn.
+function autoView(ev) {
+  const s = game.state;
+  if (!s.settings.autoView) return;
+  for (const e of ev.list) {
+    if (e.cat === 'dusk' && s.ui.view !== 'watch') { s.ui.autoReturn = s.ui.view; game.setView('watch', true); }
+    if (e.cat === 'night' && s.ui.autoReturn) {
+      const back = s.ui.autoReturn;
+      setTimeout(() => { if (game.state.phase === 'day' && game.state.ui.autoReturn === back) { game.state.ui.autoReturn = null; game.setView(back, true); } }, 4000);
+    }
+  }
+}
+
+// ---------- settings ----------
+function applySettings() {
+  const st = game.state.settings;
+  const v = st.sound ? st.volume : { master: 0, music: 0, ambience: 0, ui: 0 };
+  game.audio.setVolumes({ ...v });
+  document.body.classList.toggle('reduced-motion', !!st.reducedMotion);
+}
+game.openSettings = () => {
+  const st = game.state.settings;
+  const save = () => { applySettings(); game.touch(); };
+  const toggle = (label, key, hint) => h('label.check', {}, h('input', { type: 'checkbox', checked: st[key], onchange: (e) => { st[key] = e.target.checked; save(); } }), h('span', {}, label, hint ? h('span.small', { style: { display: 'block', fontFamily: 'var(--sa)', color: '#5a3e26' } }, hint) : null));
+  const slider = (label, key) => h('label.slider', {}, h('span', {}, label), h('input', { type: 'range', min: 0, max: 1, step: 0.05, value: st.volume[key], oninput: (e) => { st.volume[key] = Number(e.target.value); save(); } }));
+  game.desk.overlay((body, close) => {
+    const io = h('div.stack', { hidden: true });
+    const area = h('textarea', { rows: 3, 'aria-label': 'Save code', style: { width: '100%', font: '13px var(--sa)', background: 'rgba(255,248,230,.5)', border: '1px solid #5a3e26', color: '#23170f' } });
+    io.append(area, h('div.row', {}, slip('Load this code', () => {
+      try { const data = parseImport(area.value); game.state = data; game.saveNow(); game.leaving = true; location.reload(); } catch (err) { game.desk.say('attention', err.message); }
+    })));
+    body.append(h('div.stack', {},
+      h('div.row.between', {}, h('h2', {}, 'Settings'), h('button.close', { type: 'button', onclick: close, 'aria-label': 'Close settings' }, '×')),
+      h('h3', { style: { marginTop: '6px' } }, 'Sound'),
+      toggle('Sound on', 'sound', 'Music, the forest at night, and the noises of battle.'),
+      slider('Everything', 'master'), slider('Music', 'music'), slider('Forest and wind', 'ambience'), slider('Battle and buttons', 'ui'),
+      h('h3', { style: { marginTop: '6px' } }, 'Play'),
+      toggle('Look through the reading glass at dusk', 'autoView', 'Moves to the Watch when night falls, and back again after dawn.'),
+      toggle('Less motion', 'reducedMotion', 'Stills the fireflies, marching routes and sliding lenses.'),
+      h('h3', { style: { marginTop: '6px' } }, 'Your village'),
+      h('div.row', { style: { flexWrap: 'wrap', gap: '10px' } },
+        slip('Download a save', () => downloadText(`${game.state.village.name}-glasswood.txt`, exportCode(game.state))),
+        slip('Copy save code', () => { area.value = exportCode(game.state); io.hidden = false; area.select(); navigator.clipboard?.writeText(area.value).then(() => game.desk.say('done', 'Save code copied.'), () => {}); }),
+        slip('Load a save code', () => { io.hidden = false; area.value = ''; area.focus(); }),
+        slip('Start over', () => {
+          if (!confirm(`Start a new village? ${game.state.village.name} will be kept as a backup you can load again.`)) return;
+          game.leaving = true; deleteSave(); location.reload();
+        })),
+      io,
+      h('p.hand.small', { style: { margin: '4px 0 0' } }, 'Keys: 1, 2 and 3 switch views. N calls the night, X changes night speed, Space pauses, O opens settings.')));
+  });
+};
+
 let hoverKey = null;
 function hoverPreview() {
   const s = game.state;
@@ -60,7 +128,7 @@ function hoverPreview() {
 
 game.touch = () => { clearTimeout(game.saveTimer); game.saveTimer = setTimeout(() => game.saveNow(), 1200); };
 game.saveNow = () => {
-  if (!game.state || !lock?.isOwner()) return;
+  if (!game.state || !lock?.isOwner() || game.leaving) return;
   try { saveGame(game.state); game.lastSave = Date.now(); } catch (err) {
     if (!game.warnedSave) game.desk.say('attention', 'Progress could not be saved in this browser. Storage may be full or turned off.');
     game.warnedSave = true;
@@ -111,11 +179,15 @@ function frame(now) {
 }
 
 function keys(e) {
-  if (e.target.closest('input, textarea')) return;
+  if (e.target.closest('input, textarea') || !document.getElementById('overlay').hidden) { if (e.key === 'Escape') document.querySelector('#overlay .close')?.click(); return; }
   const s = game.state;
-  if (e.key === 'n' || e.key === 'N') { if (s.phase === 'day') game.callNight(); }
+  if (e.key === '1') game.setView('wilds');
+  else if (e.key === '2') game.setView('watch');
+  else if (e.key === '3') game.setView('hearth');
+  else if (e.key === 'o' || e.key === 'O') game.openSettings();
+  else if (e.key === 'n' || e.key === 'N') { if (s.phase === 'day') game.callNight(); }
   else if (e.key === 'x' || e.key === 'X') { if (s.phase === 'night') game.act((st) => { st.speed = st.speed === 1 ? 2 : 1; return { ok: true }; }); }
-  else if (e.key === ' ' && !e.target.closest('button')) {
+  else if (e.key === ' ' && !e.target.closest('button, [role="button"]')) {
     e.preventDefault();
     game.act((st) => { st.paused = !st.paused; st.lastTick = Date.now(); return { ok: true }; });
     game.desk.say('done', s.paused ? 'Paused. Press Space to carry on.' : 'Carrying on.');
@@ -124,7 +196,7 @@ function keys(e) {
 
 function begin(state, fresh) {
   game.state = state;
-  game.view = new WatchView(document.getElementById('scene'), {
+  game.view = new Scene(document.getElementById('scene'), {
     onEdge: (key) => { if (game.state.phase === 'day') game.edge(key); else game.desk.say('attention', 'Barricades can only be moved by day.'); },
     onEdgeHover: (key) => { hoverKey = key; game.desk.setHover(key); game.view.sync(game.state, hoverPreview()); },
     onFx: (kind) => { if (!document.hidden && !game.state.paused) sound(kind); },
@@ -134,8 +206,15 @@ function begin(state, fresh) {
       game.act((st) => { st.objectives.flags.selected = true; return { ok: true }; });
       game.desk.say('done', `${sp.name}: ${sp.blurb} ${sp.opens <= n ? 'Open.' : `Opens on night ${sp.opens}.`}`);
     },
+    onPlace: (id) => { game.state.ui.place = id; game.view.views.wilds.select(id); game.act((st) => { st.objectives.flags.selected = true; return { ok: true }; }); },
+    onBuilding: (id) => { game.state.ui.building = id; game.view.views.hearth.select(id); game.act((st) => { st.objectives.flags.selected = true; return { ok: true }; }); },
   });
   game.desk = new Desk(game);
+  state.ui.view ||= 'watch';
+  game.view.setView(state.ui.view);
+  if (state.ui.place) game.view.views.wilds.select(state.ui.place);
+  game.view.views.hearth.select(state.ui.building || 'archery');
+  applySettings();
   running = true;
   if (!fresh) runCatchUp();
   game.desk.refresh();

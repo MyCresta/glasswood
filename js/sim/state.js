@@ -39,8 +39,10 @@ export function newGame({ name = 'Emberfold', emblem = 'leaf', color = '#f0a86b'
       volume: { master: 0.7, music: 0.5, ambience: 0.6, ui: 0.7 },
       mute: { info: false, done: false },
       textScale: 1,
+      sound: true,
+      autoView: true,
     },
-    ui: { guideDismissed: false },
+    ui: { guideDismissed: false, view: 'watch' },
   };
 }
 

@@ -32,6 +32,11 @@ export function migrate(data) {
   data.ui ||= {};
   data.lastResult ||= {};
   if (!Array.isArray(data.barricades)) data.barricades = [];
+  for (const id of ['tavern', 'library', 'storehouse', 'market']) if (data.buildings[id] && data.buildings[id].level < 1) data.buildings[id].level = 1;
+  data.settings.sound ??= true;
+  data.settings.autoView ??= true;
+  data.ui ||= {};
+  data.ui.view ||= 'watch';
   if (data.battle && !data.battle.routes) data.battle = null; // a night saved by the 3D version: restart it
   return data;
 }

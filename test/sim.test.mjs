@@ -164,7 +164,7 @@ test('upgrades reserve gold, respect Town Hall caps and refund on cancel', () =>
   assert.equal(s.buildings.archery.level, 2);
   assert.equal(s.gold, 140, '150 − 40 + 30 objective reward');
   assert.match(upgradeBlocker(s, 'archery'), /Town Hall to level 2/);
-  assert.match(upgradeBlocker(s, 'farmstead'), /Milestone 3/);
+  assert.match(upgradeBlocker(s, 'farmstead'), /Milestone 4/);
   s.gold = 10;
   assert.match(upgradeBlocker(s, 'walls'), /more gold/);
 });
