@@ -33,3 +33,5 @@ There is no build step. Serve the folder with any static server, for example `py
 - `js/render/watch.js`: the live SVG layer under the reading glass (routes, barricades, creatures, arrows).
 - `js/ui/notes.js`: the notes on the desk.
 - `assets/`: the static artwork under and over the glass, drawn by `tools/design/make_game_assets.py` and rasterized by `tools/design/rasterize.py`.
+
+The interface is built from a small kit of parts (`js/ui/kit.js`) placed in named slots on the desk. Every part is shown on its own at [docs/ui/](https://mycresta.github.io/glasswood/docs/ui/).

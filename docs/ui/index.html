@@ -1,0 +1,133 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Glasswood desk kit</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Alegreya+Sans:wght@400;600&family=Fraunces:opsz,wght@9..144,400;9..144,500;9..144,600&family=Kalam&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="../../css/glasswood.css">
+<style>
+  body { overflow: auto; padding: 32px 40px 80px; }
+  .page { max-width: 1180px; margin: 0 auto; }
+  header h1 { font: 500 34px var(--fr); margin: 0 0 6px; color: #f0dcae; }
+  header p { margin: 0 0 28px; color: #c9b48c; max-width: 64ch; }
+  h2.sec { font: 500 22px var(--fr); color: #f0dcae; margin: 40px 0 6px; }
+  p.sec { color: #b9a37e; margin: 0 0 16px; max-width: 70ch; }
+  .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(var(--col), 1fr)); gap: 28px 24px; align-items: start; }
+  .spec { display: flex; flex-direction: column; gap: 8px; }
+  .spec > code { font: 13px ui-monospace, monospace; color: #c9b48c; }
+  .spec > .what { font-size: 14px; color: #a8936f; }
+  .plain { width: var(--col); }
+  .slots-demo { display: grid; grid-template-columns: var(--col) 1fr var(--col); gap: 24px; min-height: 420px; }
+  .slots-demo .colx { display: flex; flex-direction: column; gap: var(--gap); }
+  .slots-demo .s { border: 1.5px dashed rgba(201,164,90,.5); border-radius: 6px; padding: 10px; color: #d9c49a; font: 15px var(--hw); }
+  .slots-demo .s.big { flex: 1; }
+  .slots-demo .s small { display: block; color: #a8936f; font: 13px var(--sa); }
+  .slots-demo .globe { border-radius: 50%; border: 1.5px dashed rgba(201,164,90,.35); aspect-ratio: 1; align-self: center; display: grid; place-items: center; color: #8a7458; font: 15px var(--hw); }
+  .tcard { width: 168px; }
+  /* loose parts sit on a swatch of paper so their ink shows */
+  #parts .spec > :last-child { align-self: start; padding: 12px 14px; color: var(--ink); background-color: var(--paper); background-image: url(../../assets/paper.svg); background-size: 300px; background-blend-mode: multiply; box-shadow: -6px 10px 12px rgba(0,0,0,.45); }
+  body { background: #1a100c; }
+</style>
+</head>
+<body>
+<div class="page">
+<header>
+  <h1>The desk kit</h1>
+  <p>Every note on the Glasswood desk is built from these parts (<code>js/ui/kit.js</code>), with one set of sizes in <code>css/glasswood.css</code>: card padding <code>--pad</code>, one line <code>--row</code>, a head <code>--head</code>, a seal <code>--seal</code>, column width <code>--col</code>. New features should be made from these parts and placed in one of the slots below.</p>
+</header>
+
+<h2 class="sec">Slots</h2>
+<p class="sec">Both columns are made of named slots in a fixed order. Empty slots take no space. The time card keeps one height by day and by night, so the cards below it never jump.</p>
+<div class="slots-demo">
+  <div class="colx">
+    <div class="s">village<small>name and gold; later other resources</small></div>
+    <div class="s">views<small>the three tabs</small></div>
+    <div class="s">goal<small>the current goal and its reward</small></div>
+    <div class="s big">hand<small>later: your villager cards and supplies</small></div>
+    <div class="s">tools<small>settings knob, bottom left</small></div>
+  </div>
+  <div class="globe">the globe</div>
+  <div class="colx">
+    <div class="s">time<small>the night: preview by day, the battle by night</small></div>
+    <div class="s big">focus<small>what the view is about: a place, the barricades, a building, a card</small></div>
+    <div class="s">detail<small>later: a second card, such as the villager sent on an expedition</small></div>
+  </div>
+</div>
+
+<h2 class="sec">Cards</h2>
+<p class="sec">A card has three zones, each optional: a head (icon, title, one small thing on the right), content (facts, meters, lists), and a foot (an action, tokens or one hint).</p>
+<div class="grid" id="cards"></div>
+
+<h2 class="sec">Parts</h2>
+<p class="sec">The pieces that go inside a card.</p>
+<div class="grid" id="parts"></div>
+
+<h2 class="sec">Trading cards (planned)</h2>
+<p class="sec">Villagers and creatures will use the same card with a portrait in the content zone. The head carries the name and level.</p>
+<div class="grid" id="trading"></div>
+</div>
+
+<script type="module">
+import { DEFS } from '../../js/render/defs.js';
+import { h } from '../../js/ui/dom.js';
+import * as K from '../../js/ui/kit.js';
+
+// the creature symbols live in the scene's defs
+document.body.insertAdjacentHTML('afterbegin', `<svg width="0" height="0" style="position:absolute">${DEFS}</svg>`);
+const noop = () => {};
+const spec = (where, name, what, el) => document.getElementById(where).append(h('div.spec', {}, h('code', {}, name), h('span.what', {}, what), el));
+const mk = (id, zones, tone) => { const c = K.card(id, { tone }); c.set(zones); return c.root; };
+
+spec('cards', 'card · head only', 'The village: a title and one fact.', mk('v', { head: K.head(null, 'Emberfold', K.fact('coin', 150, 'Gold', null, 'gold')) }));
+spec('cards', 'card · head + aside', 'The goal: icon, title and reward.', mk('g', { head: K.head(K.icon('goal', 'red'), 'Block a path', K.fact('coin', '+20', 'Reward')) }, 'mid'));
+spec('cards', 'card · the night by day', 'Facts in the content, an action in the foot.', mk('t', {
+  head: K.head('moon', 'Night 3', K.fact('time', '41s', 'Until dusk')),
+  content: K.facts(K.fact(K.icon('goblin', 'mob'), 8, 'Goblins'), K.fact(K.icon('wolf', 'mob'), 2, 'Wolves', 'new')),
+  foot: K.action(K.seal('Night', noop), K.toggle('repeat', 'Repeat', false, noop, 'Repeat')),
+}));
+const foes = K.meter(K.icon('goblin', 'mob'), 'Left', 'red'); foes.set(0.6, 6);
+const walls = K.meter('wall', 'Walls'); walls.set(0.85, 425);
+spec('cards', 'card · the night', 'Meters in the content, tokens in the foot.', mk('n', {
+  head: K.head('moon', 'Night 3', K.fact('coin', '+14', 'Earned')),
+  content: [foes.el, walls.el],
+  foot: K.tokens([{ value: 1, label: '×1' }, { value: 2, label: '×2' }], 1, noop),
+}));
+spec('cards', 'card · a building', 'Two-column facts and an action with cost and time.', mk('b', {
+  head: K.head('hearth', 'Great Tower', K.badge(2)),
+  content: K.facts(K.fact('dmg', '5.2', 'Damage'), K.fact('reach', '11.0', 'Reach'), K.fact('rate', '1.10', 'Rate'), K.fact('people', 3, 'Archers')),
+  foot: K.action(K.seal('Upgrade', noop), K.fact('coin', 60, 'Cost'), K.fact('time', '25s', 'Time'), K.fact('coin', '−12', 'Short', null, 'red')),
+}, 'mid'));
+spec('cards', 'card · barricades', 'Pieces, a list of facts with words.', mk('r', {
+  head: K.head(null, 'Barricades', h('b.count', {}, 2)),
+  content: [K.pieces(K.ICON.barr, 2, 3), h('div.list', {}, K.fact('paces', '39 → 68', 'Hollow Gate', 'Gate'))],
+}, 'mid'));
+spec('cards', 'card · a place', 'Mixed facts, chips and a hint.', mk('p', {
+  head: K.head('place', 'Moonlit Crypt'),
+  content: [K.facts(h('span.fact', {}, h('span.word.soft', {}, 'Dungeon')), h('span.fact', {}, K.pips(4)), K.fact('time', '60m', 'There and back')), K.chips(['Wraith essence', 'Rare recipes'])],
+  foot: K.hint('Expeditions soon'),
+}, 'mid'));
+
+spec('parts', 'head(icon, title, aside)', 'One line, the aside pushed right.', h('div.plain', {}, K.head('moon', 'Night 12', K.badge(4))));
+spec('parts', 'fact(icon, value, title, word)', 'Icon, number, an optional word.', h('div.plain', {}, K.fact('paces', '39 → 68', '', 'Gate')));
+spec('parts', 'facts(...)', 'Two columns, every row one --row high.', h('div.plain', {}, K.facts(K.fact('wall', 500, ''), K.fact('armor', 2, ''), K.fact('cap', 4, ''), K.fact('people', 3, ''))));
+const m = K.meter('build', 'Building', 'gold'); m.set(0.4, '→ 3');
+spec('parts', 'meter(icon, title, tone)', 'Icon, bar, number. Tones: red, gold; low turns red.', h('div.plain', {}, m.el));
+spec('parts', 'seal(label) · slip(label)', 'The main action of a card, and a lesser one.', h('div.row', {}, K.seal('Night', noop), K.slip('Watch', noop)));
+spec('parts', 'tokens(items, current)', 'Round choices, one pressed.', K.tokens([{ value: 1, label: '×1' }, { value: 2, label: '×2' }], 2, noop));
+spec('parts', 'toggle(icon, word, on)', 'Switches on and off.', h('div.row', {}, K.toggle('repeat', 'Repeat', false, noop), K.toggle('repeat', 'Repeat', true, noop)));
+spec('parts', 'pieces(svg, left, total)', 'Identical things, the used ones faded.', K.pieces(K.ICON.barr, 1, 3));
+spec('parts', 'chips(words) · pips(n)', 'Short words; danger out of five.', h('div.stack', {}, K.chips(['Wood', 'Stone', 'Herbs']), K.pips(3)));
+spec('parts', 'hint(text, tone)', 'One line at the foot. Tones: soft, ink, red.', h('div.stack', {}, K.hint('Click a path'), K.hint('Click to remove', 'ink'), K.hint('Would seal the village', 'red')));
+spec('parts', 'badge(value)', 'A level or a count.', h('div.row', {}, K.badge(1), K.badge(12)));
+const t = K.tabs([{ id: 'wilds', label: 'Wilds' }, { id: 'watch', label: 'Watch' }, { id: 'hearth', label: 'Hearth' }], (id) => t.select(id)); t.select('watch');
+spec('parts', 'tabs(items)', 'The views.', h('div.plain', {}, t.el));
+spec('parts', 'icons', 'Line icons in ink; coin and creatures in colour.', h('div.row', { style: { flexWrap: 'wrap', maxWidth: '228px' } }, Object.keys(K.ICON).filter((k) => k !== 'barr').map((k) => h('span', { title: k }, K.icon(k)))));
+
+const tc = (name, lv, src, a, b) => h('div.tcard', {}, mk(`tc-${name}`, { head: K.head(null, name, K.badge(lv)), content: [K.portrait(src, name), K.facts(...a)], foot: b }));
+spec('trading', 'card + portrait · villager', 'Name and level, the portrait, two to four facts, one action.', tc('Wren', 2, null, [K.fact('dmg', 3, 'Strength'), K.fact('time', '40m', 'Stamina')], K.slip('Send', noop)));
+spec('trading', 'card + portrait · creature', 'The same card for the bestiary.', tc('Goblin', 1, null, [K.fact('wall', 12, 'Health'), K.fact('paces', '1.25', 'Speed')], K.hint('Seen 24')));
+</script>
+</body>
+</html>
