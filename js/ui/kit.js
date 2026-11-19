@@ -91,14 +91,17 @@ export function card(id, { tone = '', label } = {}) {
 // head: icon and title on the left, one small thing on the right
 export const head = (ic, title, aside, attrs = {}) => h('div.head-row', attrs, ic ? asIcon(ic) : null, h('span.title', {}, title), aside ? h('span.aside', {}, aside) : null);
 
-// fact: icon + number (+ word). In a `facts` grid they line up in two columns.
-export const fact = (ic, value, title, word, cls = '') => h(`span.fact${cls ? `.${cls}` : ''}`, { title }, asIcon(ic), h('b', {}, value), word ? h('span.word', {}, word) : null);
+// fact: icon + number, and a small label under the number. In a `facts` grid
+// they line up in two columns.
+export const fact = (ic, value, title, label, cls = '') => label
+  ? h(`span.fact.labelled${cls ? `.${cls}` : ''}`, { title }, asIcon(ic), h('span.v', {}, h('b', {}, value), h('span.lbl', {}, label)))
+  : h(`span.fact${cls ? `.${cls}` : ''}`, { title }, asIcon(ic), h('b', {}, value));
 export const facts = (...items) => h('div.facts', {}, clean(items));
 
-// meter: icon, bar and number. Returns the element and a setter.
-export function meter(ic, title, tone = '') {
+// meter: icon, label, bar and number. Returns the element and a setter.
+export function meter(ic, title, tone = '', label = '') {
   const bar = h('span'); const num = h('b');
-  const el = h('div.meter', { title }, asIcon(ic), h(`span.bar${tone ? `.${tone}` : ''}`, {}, bar), num);
+  const el = h('div.meter', { title }, asIcon(ic), h('span.lbl', {}, label), h(`span.bar${tone ? `.${tone}` : ''}`, {}, bar), num);
   return { el, set: (f, value, low = false) => { bar.style.width = `${(Math.max(0, Math.min(1, f)) * 100).toFixed(1)}%`; num.textContent = value; bar.parentElement.classList.toggle('low', low); } };
 }
 
@@ -123,8 +126,8 @@ export const badge = (value, title) => h('span.badge', { title }, value);
 export const pips = (n, of = 5, title) => h('span.pips', { title }, h('b.red', {}, '◆'.repeat(n)), h('span.dim', {}, '◆'.repeat(of - n)));
 
 // stepper: − and + around a value, for moving villagers between posts
-export const stepper = (value, onMinus, onPlus, title, { canMinus = true, canPlus = true } = {}) => h('span.stepper', { title },
-  h('button.step', { type: 'button', 'aria-label': 'One fewer', disabled: !canMinus || null, onclick: onMinus }, '−'), h('b', {}, value),
+export const stepper = (value, onMinus, onPlus, title, { canMinus = true, canPlus = true, label = '' } = {}) => h('span.stepper', { title },
+  h('button.step', { type: 'button', 'aria-label': 'One fewer', disabled: !canMinus || null, onclick: onMinus }, '−'), h('span.v', {}, h('b', {}, value), label ? h('span.lbl', {}, label) : null),
   h('button.step', { type: 'button', 'aria-label': 'One more', disabled: !canPlus || null, onclick: onPlus }, '+'));
 
 // tabs: the leather strip of views

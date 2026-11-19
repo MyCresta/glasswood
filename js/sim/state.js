@@ -1,6 +1,6 @@
 import { BUILDINGS, START, VILLAGERS, FIRST_DAY, wallStats } from '../data/village.js';
 
-export const SAVE_VERSION = 4;
+export const SAVE_VERSION = 5;
 
 export function newGame({ name = 'Emberfold', emblem = 'leaf', color = '#f0a86b', seed, now = Date.now() } = {}) {
   const buildings = {};
@@ -43,7 +43,7 @@ export function newGame({ name = 'Emberfold', emblem = 'leaf', color = '#f0a86b'
       mute: { info: false, done: false },
       textScale: 1,
       sound: true,
-      autoView: true,
+      autoView: false,
     },
     ui: { guideDismissed: false, view: 'watch', building: 'archery' },
   };

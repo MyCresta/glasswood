@@ -7,6 +7,7 @@ import {
 import { routeForSpawn } from './web.js';
 import { availableGold, uid } from './state.js';
 import { workers, villagerArrives } from './village.js';
+import { LOCATIONS } from '../data/world.js';
 
 const ARROW_SPEED = 18;
 const FX_MAX = 80;
@@ -289,7 +290,10 @@ export function endNight(state, won, ev) {
     state.lastResult[n] = 'won';
     state.stats.nightsWon += 1;
     const record = n > state.best;
+    const before = state.best;
     state.best = Math.max(state.best, n);
+    // holding a new night can reveal a new place in the globe
+    for (const l of LOCATIONS) if (l.found > before && l.found <= state.best && l.name) ev.emit('done', `Discovered: ${l.name}`, { cat: 'discover', place: l.id });
     if (!state.hold) state.night = n + 1;
     ev.emit('done', `Night ${n} held. +${b.gold + reward} gold${record && n > 1 ? '. New best' : ''}`, { cat: 'night', record });
     ev.sound?.('dawn');

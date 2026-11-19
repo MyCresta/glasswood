@@ -47,7 +47,7 @@ export function callNight(state, ev) {
   return { ok: true };
 }
 
-// Live play: consume real time in fixed steps. Night speed only applies at night.
+// Live play: consume real time in fixed steps.
 // `carry` holds unspent real milliseconds between calls (kept out of the save).
 export function pump(state, now, carry, ev) {
   let budget = carry.ms + Math.max(0, now - state.lastTick);
@@ -55,14 +55,13 @@ export function pump(state, now, carry, ev) {
   if (state.paused) { carry.ms = 0; return; }
   let guard = 0;
   for (;;) {
-    const f = state.phase === 'night' ? state.speed : 1;
-    const cost = (STEP * 1000) / f;
+    const cost = STEP * 1000;
     if (budget < cost || guard++ > 4000) break;
     budget -= cost;
     tick(state, STEP, ev);
   }
   carry.ms = Math.min(budget, 1000);
-  carry.alpha = budget / ((STEP * 1000) / (state.phase === 'night' ? state.speed : 1));
+  carry.alpha = budget / (STEP * 1000);
 }
 
 // Time away: upgrades continue; nights are defended at the safe night for

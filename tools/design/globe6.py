@@ -162,19 +162,25 @@ def terrain(s=2.95, miniature=None):
         o.append(f'<radialGradient id="minifade" gradientUnits="userSpaceOnUse" cx="630" cy="410" r="350"><stop offset=".8" stop-color="#fff"/><stop offset="1" stop-color="#fff" stop-opacity="0"/></radialGradient><mask id="minimask" maskUnits="userSpaceOnUse" x="270" y="50" width="720" height="720"><circle cx="630" cy="410" r="350" fill="url(#minifade)"/></mask>')
         o.append(f'<g transform="translate({GX} {GY}) scale({k:.5f}) translate(-630 -410)"><g mask="url(#minimask)">{miniature}</g></g>')
     o.append(mountains(s))
-    u = s / 3.6 * 1.6
+    o += [f'<circle cx="{GX+r.uniform(-R,R):.0f}" cy="{GY+r.uniform(-R,R):.0f}" r="6" fill="url(#gl)"/>' for _ in range(26)]
+    o.append('</g>')
+    return ''.join(o)
+
+
+def markers(s=2.95):
+    """Each place's little landmark, drawn live by the game once it is discovered."""
+    T = lambda x, z: (GX + x * s, GY + z * s); u = s / 3.6 * 1.6; out = {}
     for id_, kd, n, p in D.LOC:
-        X, Y = T(*p)
         if kd == 'home': continue
+        X, Y = T(*p); o = []
         if kd == 'village': o.append(f'<circle cx="{X}" cy="{Y}" r="{22*u}" fill="url(#eg)"/>' + D.roofs(X, Y, 6, u * 1.1, hash(id_) % 99))
         elif kd == 'ruins': o.append(''.join(f'<rect x="{X+math.cos(a)*8*u-2.5*u:.1f}" y="{Y+math.sin(a)*8*u-2*u:.1f}" width="{5*u:.1f}" height="{4*u:.1f}" fill="#a39e95" stroke="#3a3530" stroke-width=".8"/>' for a in [j * .9 for j in range(6)]))
         elif kd == 'dungeon':
             g = 'cy' if id_ == 'crystal' else 'vg'; o.append(f'<circle cx="{X}" cy="{Y}" r="{26*u}" fill="url(#{g})"/><ellipse cx="{X}" cy="{Y}" rx="{6*u}" ry="{4.5*u}" fill="#0d070a" stroke="#4a2e1e" stroke-width="{1.6*u:.1f}"/>')
         elif id_ == 'quarry': o.append(f'<rect x="{X-8*u}" y="{Y-6*u}" width="{16*u}" height="{12*u}" fill="#b8ab92" stroke="#5a4e3c"/>')
         else: o.append(''.join(f'<circle cx="{X+math.cos(a)*7*u:.1f}" cy="{Y+math.sin(a)*7*u:.1f}" r="{1.6*u:.1f}" fill="#c9c4bb" stroke="#3a3530"/>' for a in [j * math.tau / 7 for j in range(7)]))
-    o += [f'<circle cx="{GX+r.uniform(-R,R):.0f}" cy="{GY+r.uniform(-R,R):.0f}" r="6" fill="url(#gl)"/>' for _ in range(26)]
-    o.append('</g>')
-    return ''.join(o)
+        out[id_] = ''.join(o)
+    return out
 
 def sphere_glass():
     """What the glass itself adds on top of the world: a darker rim where the

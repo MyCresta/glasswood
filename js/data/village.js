@@ -7,8 +7,8 @@ export const WALL_R = 3.0;
 export const FIELD_R = 33.6; // what the reading glass shows
 export const STEP = 0.05; // fixed simulation step (seconds)
 
-export const DAY_LENGTH = 120;
-export const FIRST_DAY = 60;
+export const DAY_LENGTH = 300;
+export const FIRST_DAY = 90;
 export const NIGHT_CAP = 180; // seconds after the first spawn before stragglers retreat
 export const OFFLINE_CAP = 24 * 3600;
 export const OFFLINE_REWARD = 0.75;
@@ -124,6 +124,8 @@ export const BUILDINGS = {
       { gain: 'Two barricades', barricades: 2, cost: { gold: 150, timber: 100, stone: 40 }, time: 25 * M },
       { gain: 'Three barricades', barricades: 3, cost: { gold: 400, timber: 200, stone: 140 }, time: 2 * H },
       { gain: 'Four barricades', barricades: 4, cost: { gold: 900, timber: 350, stone: 300 }, time: 6 * H },
+      { gain: 'Five barricades', barricades: 5, cost: { gold: 1500, timber: 500, stone: 450 }, time: 10 * H },
+      { gain: 'Six barricades', barricades: 6, cost: { gold: 2400, timber: 750, stone: 700 }, time: 16 * H },
     ],
   },
 };

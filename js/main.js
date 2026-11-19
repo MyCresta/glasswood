@@ -115,7 +115,7 @@ game.openSettings = () => {
       toggle('Sound on', 'sound', 'Music, the forest at night, and the noises of battle.'),
       slider('Everything', 'master'), slider('Music', 'music'), slider('Forest and wind', 'ambience'), slider('Battle and buttons', 'ui'),
       h('h3', { style: { marginTop: '6px' } }, 'Play'),
-      toggle('Look through the reading glass at dusk', 'autoView', 'Moves to the Watch when night falls, and back again after dawn.'),
+      toggle('Move to the Watch at dusk', 'autoView', 'Off by default: the view stays where you are when night falls.'),
       toggle('Less motion', 'reducedMotion', 'Stills the fireflies, marching routes and sliding lenses.'),
       h('h3', { style: { marginTop: '6px' } }, 'Your village'),
       h('div.row', { style: { flexWrap: 'wrap', gap: '10px' } },
@@ -127,7 +127,7 @@ game.openSettings = () => {
           game.leaving = true; deleteSave(); location.reload();
         })),
       io,
-      h('p.hand.small', { style: { margin: '4px 0 0' } }, 'Keys: 1, 2 and 3 switch views. N calls the night, X changes night speed, Space pauses, O opens settings.')));
+      h('p.hand.small', { style: { margin: '4px 0 0' } }, 'Keys: 1, 2 and 3 switch views. N calls the night, Space pauses, O opens settings.')));
   });
 };
 
@@ -202,7 +202,6 @@ function keys(e) {
   else if (e.key === '3') game.setView('hearth');
   else if (e.key === 'o' || e.key === 'O') game.openSettings();
   else if (e.key === 'n' || e.key === 'N') { if (s.phase === 'day') game.callNight(); }
-  else if (e.key === 'x' || e.key === 'X') { if (s.phase === 'night') game.act((st) => { st.speed = st.speed === 1 ? 2 : 1; return { ok: true }; }); }
   else if (e.key === ' ' && !e.target.closest('button, [role="button"]')) {
     e.preventDefault();
     game.act((st) => { st.paused = !st.paused; st.lastTick = Date.now(); return { ok: true }; });

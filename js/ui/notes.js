@@ -56,11 +56,11 @@ export class Desk {
     const have = ['gold', 'timber', 'stone'].map((r) => Math.floor(available(s, r)));
     const prod = production(s);
     this.part('village', `${s.village.name}|${have}|${s.villagers.length}|${housing(s)}|${prod.timber}|${prod.stone}`, () => this.village.set({
-      head: head(null, s.village.name, fact('people', `${s.villagers.length}/${housing(s)}`, 'Villagers, and beds for them')),
+      head: head(null, s.village.name, fact('people', `${s.villagers.length}/${housing(s)}`, 'Villagers, and beds for them', 'villagers')),
       content: h('div.res', {},
-        fact('coin', have[0], 'Gold', null, 'gold'),
-        fact('timber', have[1], prod.timber ? `Timber: +${Math.round(prod.timber * 60)} a minute` : 'Timber: restore the Lumber Camp'),
-        fact('stone', have[2], prod.stone ? `Stone: +${Math.round(prod.stone * 60)} a minute` : 'Stone: restore the Quarry')),
+        fact('coin', have[0], 'Gold', 'gold', 'gold'),
+        fact('timber', have[1], prod.timber ? `Timber: +${Math.round(prod.timber * 60)} a minute` : 'Timber: restore the Lumber Camp', prod.timber ? `+${Math.round(prod.timber * 60)}/min` : 'timber'),
+        fact('stone', have[2], prod.stone ? `Stone: +${Math.round(prod.stone * 60)} a minute` : 'Stone: restore the Quarry', prod.stone ? `+${Math.round(prod.stone * 60)}/min` : 'stone')),
     }));
     this.refreshGoal(s);
     this.refreshTime(s);
@@ -84,9 +84,10 @@ export class Desk {
         this.timer = h('b');
         const comp = Object.entries(pv.comp).filter(([, k]) => k > 0);
         this.time.set({
-          head: head('moon', `Night ${s.night}`, h('span.fact', { title: 'Until dusk' }, icon('time'), this.timer)),
+          head: head('moon', `Night ${s.night}`),
           content: [
-            facts(...comp.map(([t, k]) => fact(icon(t, 'mob'), k, `${k} ${(k === 1 ? ENEMIES[t].name : ENEMIES[t].plural).toLowerCase()}`, pv.newEnemy === t ? 'new' : null))),
+            facts(h('span.fact.labelled', { title: 'Until the night comes' }, icon('time'), h('span.v', {}, this.timer, h('span.lbl', {}, 'until dusk'))),
+              ...comp.map(([t, k]) => fact(icon(t, 'mob'), k, `${k} ${(k === 1 ? ENEMIES[t].name : ENEMIES[t].plural).toLowerCase()}`, `${(k === 1 ? ENEMIES[t].name : ENEMIES[t].plural).toLowerCase()}${pv.newEnemy === t ? ', new' : ''}`, pv.newEnemy === t ? 'red' : ''))),
             pv.newSpawn ? hint(`+ ${pv.newSpawn.name}`, 'red', `${pv.newSpawn.name} opens tonight`) : null,
           ],
           foot: action(seal('Night', () => this.g.callNight(), { title: 'Call the night now (N)' }),
@@ -96,14 +97,13 @@ export class Desk {
       this.timer.textContent = dur(s.dayLength - s.phaseT);
     } else {
       const bt = s.battle;
-      this.part('time', `night:${bt.n}:${s.speed}`, () => {
-        this.foes = meter(icon('goblin', 'mob'), 'Creatures still out there', 'red');
-        this.walls = meter('wall', 'Walls');
+      this.part('time', `night:${bt.n}`, () => {
+        this.foes = meter(icon('goblin', 'mob'), 'Creatures still out there', 'red', 'left');
+        this.walls = meter('wall', 'Walls', '', 'walls');
         this.earned = h('b');
         this.time.set({
-          head: head('moon', `Night ${bt.n}`, h('span.fact', { title: 'Gold earned tonight' }, icon('coin'), this.earned)),
-          content: [this.foes.el, this.walls.el],
-          foot: tokens([{ value: 1, label: '×1', title: 'Normal speed (X)' }, { value: 2, label: '×2', title: 'Double speed (X)' }], s.speed, (v) => this.g.act((st) => { st.speed = v; return { ok: true }; })),
+          head: head('moon', `Night ${bt.n}`),
+          content: [this.foes.el, this.walls.el, h('span.fact.labelled', { title: 'Gold earned tonight' }, icon('coin'), h('span.v', {}, this.earned, h('span.lbl', {}, 'earned tonight')))],
         });
       });
       const left = bt.total - bt.kills;
@@ -116,14 +116,16 @@ export class Desk {
 
   refreshPlace(s) {
     const id = s.ui.place || null;
-    this.part('focus', `place|${id}|${s.village.name}`, () => {
+    this.part('focus', `place|${id}|${s.village.name}|${s.best}`, () => {
       const l = LOCATIONS.find((x) => x.id === id);
-      if (!l) { this.focus.set({ head: head('wilds', 'Wilds'), foot: hint('Click a place') }); return; }
+      const next = LOCATIONS.filter((x) => x.found > s.best).sort((a, b) => a.found - b.found)[0];
+      const nextFact = next ? fact('moon', `Night ${next.found}`, 'Hold this night to discover the next place', 'next discovery') : null;
+      if (!l) { this.focus.set({ head: head('wilds', 'Wilds'), content: facts(fact('place', LOCATIONS.filter((x) => x.found <= s.best).length - 1, 'Places discovered', 'discovered'), nextFact), foot: hint('Click a place') }); return; }
       if (l.kind === 'home') { this.focus.set({ head: head('place', s.village.name, hint('Home')), foot: slip('Watch', () => this.g.setView('watch')) }); return; }
       this.focus.set({
         head: head('place', l.name, null, { title: l.blurb }),
         content: [
-          facts(h('span.fact', {}, h('span.word.soft', {}, LOCATION_KINDS[l.kind].name)), l.difficulty ? h('span.fact', { title: `Danger ${l.difficulty} of 5` }, pips(l.difficulty)) : null, l.hours ? fact('time', `${Math.round(l.hours * 60)}m`, 'There and back') : null),
+          facts(h('span.fact.labelled', {}, icon('place'), h('span.v', {}, h('b', {}, LOCATION_KINDS[l.kind].name), h('span.lbl', {}, 'kind'))), l.difficulty ? h('span.fact.labelled', { title: `Danger ${l.difficulty} of 5` }, icon('danger'), h('span.v', {}, pips(l.difficulty), h('span.lbl', {}, 'danger'))) : null, l.hours ? fact('time', `${Math.round(l.hours * 60)}m`, 'There and back', 'trip') : null),
           l.rewards ? chips(l.rewards) : null,
         ],
         foot: hint('Expeditions soon', 'soft', 'Expeditions arrive with the villager cards'),
@@ -142,13 +144,13 @@ export class Desk {
     this.part('focus', `bld|${id}|${lv}|${bl.startsWith('Needs') ? 'res' : bl}|${q ? q.id : ''}|${w}|${idle}|${s.villagers.length}|${barricadeMax(s)}`, () => {
       const v = level(id, lv);
       const stats = [];
-      if (def.job) stats.push(stepper(`${w}/${v.slots || 0}`, () => this.g.unpost(id), () => this.g.post(id), `${def.jobs}: ${w} of ${v.slots || 0} posts filled${idle ? `, ${idle} resting` : ''}`, { canMinus: w > 0, canPlus: w < (v.slots || 0) && s.villagers.length > w }));
-      if (id === 'archery') { const st = archeryStats(lv, w); stats.push(fact('dmg', st.dmg.toFixed(1), 'Damage per arrow'), fact('reach', st.range.toFixed(1), 'Reach'), st.shots > 1 ? fact('rate', `×${st.shots}`, 'Arrows per shot') : null); }
-      if (id === 'walls') { const st = wallStats(lv); stats.push(fact('wall', st.integrity, 'Strength (mended every dawn)'), fact('armor', st.armor, 'Armour against every hit')); }
-      if (id === 'townhall') stats.push(fact('cap', levelCap(s, 'tavern'), 'Other buildings can grow to this level'), fact('build', builders(s), 'Builders working at the same time'));
-      if (id === 'tavern') stats.push(fact('people', `${s.villagers.length}/${housing(s)}`, 'Villagers and beds. A traveller settles after every night held, if there is a bed'));
-      if (def.makes) stats.push(fact(def.makes, `+${Math.round(Math.min(w, v.slots || 0) * (v.per || 0))}`, `${def.makes[0].toUpperCase() + def.makes.slice(1)} a minute`, '/min'));
-      if (id === 'workshop') stats.push(fact(h('span.ic', { html: ICON.barr }), barricadeMax(s), 'Barricades you can place'));
+      if (def.job) stats.push(stepper(`${w}/${v.slots || 0}`, () => this.g.unpost(id), () => this.g.post(id), `${def.jobs}: ${w} of ${v.slots || 0} posts filled${idle ? `, ${idle} resting` : ''}`, { canMinus: w > 0, canPlus: w < (v.slots || 0) && s.villagers.length > w, label: def.jobs.toLowerCase() }));
+      if (id === 'archery') { const st = archeryStats(lv, w); stats.push(fact('dmg', st.dmg.toFixed(1), 'Damage per arrow', 'damage'), fact('reach', st.range.toFixed(1), 'How far the archers shoot', 'reach'), st.shots > 1 ? fact('rate', `×${st.shots}`, 'Arrows per shot', 'arrows') : null); }
+      if (id === 'walls') { const st = wallStats(lv); stats.push(fact('wall', st.integrity, 'Strength, mended every dawn', 'strength'), fact('armor', st.armor, 'Taken off every hit', 'armour')); }
+      if (id === 'townhall') stats.push(fact('cap', levelCap(s, 'tavern'), 'Other buildings can grow to this level', 'max level'), fact('build', builders(s), 'Builders working at the same time', 'builders'));
+      if (id === 'tavern') stats.push(fact('people', `${s.villagers.length}/${housing(s)}`, 'A traveller settles after every night held, if there is a bed', 'beds used'));
+      if (def.makes) stats.push(fact(def.makes, `+${Math.round(Math.min(w, v.slots || 0) * (v.per || 0))}`, `${def.makes[0].toUpperCase() + def.makes.slice(1)} a minute`, `${def.makes} / min`));
+      if (id === 'workshop') stats.push(fact(h('span.ic', { html: ICON.barr }), barricadeMax(s), 'Barricades you can place', 'barricades'));
       const next = def.levels[lv + 1];
       const kids = [facts(...stats)];
       if (next) kids.push(h('div.next', { title: 'The next level' }, icon('next'), h('span', {}, next.gain)));
@@ -162,9 +164,9 @@ export class Desk {
         else if (bl.startsWith('Raise the Town Hall')) why = hint('Town Hall first', 'red', bl);
         else if (bl) why = hint('Builders busy', 'red', bl);
         const cost = upgradeCost(id, lv);
-        kids.push(h('div.res.cost', { title: 'Cost' }, ['gold', 'timber', 'stone'].map((r) => cost[r] ? fact(r === 'gold' ? 'coin' : r, cost[r], r, null, s[r] - (s.reserved[r] || 0) < cost[r] ? 'red' : '') : h('span'))));
+        kids.push(h('div.res.cost', { title: 'Cost' }, ['gold', 'timber', 'stone'].map((r) => cost[r] ? fact(r === 'gold' ? 'coin' : r, cost[r], `${cost[r]} ${r}`, r, s[r] - (s.reserved[r] || 0) < cost[r] ? 'red' : '') : h('span'))));
         foot = action(seal(lv === 0 ? 'Restore' : 'Upgrade', () => this.g.upgrade(id), { title: lv === 0 ? 'Restore it' : `To level ${lv + 1}` }),
-          fact('time', dur(upgradeTime(id, lv)), 'Build time'), why);
+          fact('time', dur(upgradeTime(id, lv)), 'Build time', 'build time'), why);
       }
       this.focus.set({ head: head('hearth', def.name, lv === 0 ? hint('Ruin', 'soft') : badge(lv, `Level ${lv}`), { title: def.blurb }), content: kids, foot });
     });
@@ -192,11 +194,11 @@ export class Desk {
           const before = routeLengths(s.barricades);
           const after = routeLengths([...s.barricades, key]);
           const rows = nightPreview(s).spawns.filter((sp) => Math.abs(after[sp.id] - before[sp.id]) > 0.5)
-            .map((sp) => fact('paces', `${Math.round(before[sp.id])} → ${Math.round(after[sp.id])}`, `${sp.name}: the walk becomes ${Math.round(after[sp.id])} paces instead of ${Math.round(before[sp.id])}`, sp.name.split(' ').at(-1)));
+            .map((sp) => fact('paces', `${Math.round(before[sp.id])} → ${Math.round(after[sp.id])}`, `${sp.name}: the walk becomes ${Math.round(after[sp.id])} paces instead of ${Math.round(before[sp.id])}`, `paces from ${sp.name}`));
           if (rows.length) content = h('div.list', {}, rows); else foot = hint('No change tonight', 'soft', 'Nobody walks this path tonight');
         }
       } else foot = hint(left ? 'Click a path' : 'Click one to remove');
-      this.focus.set({ head: head(null, 'Barricades', h('b.count', {}, max ? left : '–')), content: [max ? pieces(ICON.barr, left, max, `${left} of ${max} left`) : null, content], foot });
+      this.focus.set({ head: head(null, 'Barricades', max ? fact(h('span.ic', { html: ICON.barr }), `${left}/${max}`, 'Barricades left to place', 'left') : null), content: [max ? pieces(ICON.barr, left, max, `${left} of ${max} left`) : null, content], foot });
     });
   }
 

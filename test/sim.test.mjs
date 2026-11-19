@@ -2,7 +2,8 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { newGame } from '../js/sim/state.js';
 import { WEB, EDGE, edgeKey, buildField, routeFrom, routeForSpawn, canBlock, routeLengths } from '../js/sim/web.js';
-import { SPAWNS, wallStats, archeryStats, DAY_LENGTH, START, BUILDINGS } from '../js/data/village.js';
+import { SPAWNS, wallStats, archeryStats, DAY_LENGTH, FIRST_DAY, START, BUILDINGS } from '../js/data/village.js';
+import { discovered } from '../js/data/world.js';
 import { makeEvents, advance, tick, catchUp, callNight, pump } from '../js/sim/time.js';
 import { waveSchedule, waveComposition, safeNight, activeSpawns } from '../js/sim/battle.js';
 import { queueUpgrade, cancelUpgrade, upgradeBlocker, upgradeCost, placeBarricade, removeBarricade, barricadeMax, workers, postWorker, unpostWorker, villagerArrives, production, builders, levelCap } from '../js/sim/village.js';
@@ -121,7 +122,7 @@ test('waves are deterministic and grow', () => {
 test('the first day ends, and one archer wins night 1 untouched', () => {
   const s = fresh();
   const e = ev(s);
-  advance(s, 61, e);
+  advance(s, FIRST_DAY + 1, e);
   assert.equal(s.phase, 'night');
   let g = 0;
   while (s.phase === 'night' && g++ < 40000) tick(s, 0.05, e);
@@ -292,7 +293,7 @@ test('an interrupted night is abandoned without loss', () => {
   assert.equal(s.lastResult[1], undefined);
 });
 
-test('pump: pausing stops time, and night speed only speeds up nights', () => {
+test('pump: pausing stops time; nights run at the same speed as days', () => {
   const s = fresh();
   s.paused = true;
   const carry = { ms: 0 };
@@ -302,10 +303,19 @@ test('pump: pausing stops time, and night speed only speeds up nights', () => {
   pump(s, 15000, carry, ev(s));
   assert.ok(Math.abs(s.time - 10) < 0.06);
   callNight(s, ev(s));
-  s.speed = 2;
+  s.speed = 2; // an old save's setting must not matter
   const t0 = s.time;
   pump(s, 16000, carry, ev(s));
-  assert.ok(Math.abs(s.time - t0 - 2) < 0.06);
+  assert.ok(Math.abs(s.time - t0 - 1) < 0.06);
+});
+
+test('places in the globe are discovered by holding nights', () => {
+  assert.deepEqual(discovered(0).map((l) => l.id), ['home']);
+  const s = fresh();
+  runNight(s);
+  const e = runNight(s);
+  assert.ok(e.list.some((x) => x.cat === 'discover' && x.place === 'whispering'));
+  assert.equal(discovered(s.best).length, 2);
 });
 
 test('deterministic, and survives JSON round-trips mid-night', () => {
