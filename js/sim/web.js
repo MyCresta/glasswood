@@ -2,7 +2,7 @@
 // village by creature size, and the rule that barricades may never seal the
 // village off, for any size of creature that can come from a burrow.
 import { SPAWNS, WALL_R } from '../data/village.js';
-import { generateForest, WIDTH, ROAD_BURROWS } from './forest.js';
+import { generateForest, WIDTH, ROAD_BURROWS, bez } from './forest.js';
 
 export const ROAD_SPAWNS = ROAD_BURROWS;
 
@@ -40,7 +40,7 @@ export const SIZE_NAMES = { small: 'small creatures', medium: 'wolves', large: '
 export function makeWeb(forest) {
   const NODES = forest.nodes;
   const WEB = forest.edges.map(([a, b, mid, w]) => {
-    const pts = sampleCurve([NODES[a], mid, NODES[b]]);
+    const pts = bez(NODES[a], mid, NODES[b], 16);
     return { key: edgeKey(a, b), a, b, mid, pts, len: polyLength(pts), w: w || 'path', wi: WIDTH[w || 'path'] };
   });
   const EDGE = new Map(WEB.map((e) => [e.key, e]));
@@ -116,10 +116,13 @@ export function makeWeb(forest) {
     const blocked = [...barricades, key];
     for (const size of ['small', 'medium', 'large']) {
       const field = buildField(blocked, size);
-      const sealed = SPAWNS.filter((s) => sizesFor(s).includes(size) && !isFinite(field.dist.get(s.node) ?? Infinity));
+      const from = SPAWNS.filter((s) => sizesFor(s).includes(size));
+      let sealed = from.filter((s) => !isFinite(field.dist.get(s.node) ?? Infinity));
+      // bosses only need one road in, from any of their burrows
+      if (size === 'large' && sealed.length < from.length) sealed = [];
       if (sealed.length) {
         const names = sealed.map((s) => s.name).join(', ');
-        return { ok: false, reason: `That would seal the village off from ${names} for ${SIZE_NAMES[size]}. There must always be a way in.`, sealed: sealed.map((s) => s.id), size };
+        return { ok: false, reason: size === 'large' ? 'That would close the last road. Bosses must always have a way in.' : `That would seal the village off from ${names}. There must always be a way in.`, sealed: sealed.map((s) => s.id), size };
       }
     }
     return { ok: true };

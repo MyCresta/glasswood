@@ -111,7 +111,7 @@ export function meter(ic, title, tone = '', label = '') {
 }
 
 // seal: the main action of a card
-export const seal = (label, onClick, attrs = {}) => h('div.seal', {}, h('button', { type: 'button', onclick: onClick, ...attrs }, h('span', {}, label)));
+export const seal = (label, onClick, { cls = '', ...attrs } = {}) => h(`div.seal${cls ? `.${cls}` : ''}`, {}, h('button', { type: 'button', onclick: onClick, ...attrs }, h('span', {}, label)));
 // slip: a lesser action
 export const slip = (label, onClick, attrs = {}) => h('div.slip', {}, h('button', { type: 'button', onclick: onClick, ...attrs }, label));
 // action: a seal, and the facts that go with it stacked beside it
@@ -127,7 +127,7 @@ export const toggle = (ic, word, checked, onChange, title) => h('label.toggle', 
 export const pieces = (svg, left, total, title) => h('div.pieces', { title }, Array.from({ length: total }, (_, i) => h(`span${i < left ? '' : '.used'}`, { html: svg })));
 export const chips = (words) => h('div.chips', {}, words.map((w) => h('span.chip', {}, w)));
 // A short numbered list of what to do next: done steps are struck, the current one is marked.
-export const steps = (items) => h('ol.steps', {}, items.filter(Boolean).map((it, i) => h(`li${it.done ? '.done' : ''}${it.now ? '.now' : ''}`, { title: it.title || null }, h('b.n', {}, String(i + 1)), h('span', {}, it.text))));
+export const steps = (items) => h('ol.steps', {}, items.filter(Boolean).map((it, i) => h(`li${it.done ? '.done' : ''}${it.now ? '.now' : ''}${it.onclick ? '.link' : ''}`, { title: it.title || null, onclick: it.onclick || null }, h('b.n', {}, it.done ? '✓' : String(i + 1)), h('span', {}, it.text))));
 export const hint = (text, tone = 'soft', title) => h(`span.hint.${tone}`, { title }, text);
 export const badge = (value, title) => h('span.badge', { title }, value);
 export const pips = (n, of = 5, title) => h('span.pips', { title }, h('b.red', {}, '◆'.repeat(n)), h('span.dim', {}, '◆'.repeat(of - n)));

@@ -128,13 +128,11 @@ No build step, static files on GitHub Pages. The simulation is deterministic and
 
 ## 14. Status
 
-Milestones 1 to 3 are in, with the first part of 6:
+Milestones 1 to 3 are in, with parts of 5 and 6.
 
-- **Main menu** on every visit: Continue, New run, Unlocks, How to play, Settings, with Embers, best night and runs finished. Esc or the menu knob opens it and pauses the night.
-- **Starter card:** every run opens on a choice of three cards from a starter pool (four with Wider Choice).
-- **Unlocks for Embers:** eight cards start locked (Crossbow, Frost Witch, Frost Ward, Ember Ward, Iron Gate, Thorn Hedge, Barricade Cart, Twin String) and four boosts (Spare Reroll, Old Stones, Purse, Wider Choice).
-- **Clearer flow:** the night note lists the steps (block paths, start the night) and marks the current one; during the night it says how to cast; the run-over card leads to Unlocks.
-- **Generated forests:** a new seeded path web every run (about 77 crossings and 150 paths), trails, paths and roads, drawn live and rasterised once for the reading glass and the globe. Routing and the never-seal rule work per creature size.
-- **Bosses:** a Troll every tenth night (two from night 40), roads only, from burrows with two roads in. Routes shown before the night: gold for goblins, blue where wolves go another way, red for a boss.
-
-A simulated player with no unlocks ends runs around night 20; with every unlock around night 26 (range 19 to 38). A run earns about 25 to 35 Embers, so the unlocks take roughly eight to ten runs.
+- **Menu, starter card, Ember unlocks** as before.
+- **Forests:** rings joined by a few spokes, no paths crossing without a junction, so a barricade on a spoke sends creatures round the ring. Trails, paths and roads; bosses need only one road in.
+- **Cards in directions:** six tags (Bow, Fire, Frost, Iron, Stone, Maze), each with two synergy tiers. Every card grows with the night (the village grows 4% a night, creatures 20%), so walls and spells never fade. Copies of a spell make one stronger spell. Balanced with `scripts`-style simulations: each card adds roughly the same nights to a random deck for its rarity, and a bot that builds any one direction lasts 26 to 33 nights.
+- **Hearth: gold upgrades.** Great Tower (+10% damage), Walls & Gate (+15% walls), Workshop (+1 barricade, three levels), Shrine (+12% spells, shorter cooldowns). Costs grow 1.8 times a level. The buildings are drawn in three stages that follow their level (tools/design/hearth6.py).
+- **Wilds: expeditions.** One a day to a discovered place for a stated reward (gold, rerolls, Embers or a card choice); the place then rests a few nights.
+- **The camp checklist** on the night note: expedition, upgrades, barricades, then the night seal glows when nothing is left.

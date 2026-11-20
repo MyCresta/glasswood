@@ -8,7 +8,8 @@ import { ENEMIES, SPAWNS, BUILDINGS } from '../data/village.js';
 import { CARD, FAMILIES, RARITY, SYNERGIES, TAG_NAMES } from '../data/cards.js';
 import { nightPreview, magicScale } from '../sim/battle.js';
 import { build } from '../sim/build.js';
-import { rerollCost, unlockCost, unlockLevel } from '../sim/run.js';
+import { rerollCost, unlockCost, unlockLevel, affordableUpgrades, placesReady, expeditionReady, rewardOf } from '../sim/run.js';
+import { UPGRADES, upgradeCost } from '../sim/build.js';
 import { UNLOCKS, LOCKED_CARDS } from '../data/unlocks.js';
 import { barricadeMax } from '../sim/village.js';
 import { LOCATIONS, LOCATION_KINDS } from '../data/world.js';
@@ -27,7 +28,9 @@ function cardFacts(c) {
   if (c.spell?.active) out.push(fact('time', `${c.spell.cd}s`, 'Cooldown', 'cooldown'));
   if (c.spell?.dmg) out.push(fact('dmg', c.spell.dmg, 'Damage on night 1; grows each night', 'damage'));
   if (c.walls?.integrity) out.push(fact('wall', `+${c.walls.integrity}`, 'Wall strength', 'strength'));
-  if (c.walls?.armor) out.push(fact('armor', `+${c.walls.armor}`, 'Armour', 'armour'));
+  if (c.walls?.thorns) out.push(fact('dmg', c.walls.thorns, 'Thorns: damage to every attacker, each hit', 'thorns'));
+  if (c.walls?.oil) out.push(fact('dmg', `${c.walls.oil}/s`, 'Boiling oil: burns creatures at the walls', 'oil'));
+  if (c.spikes) out.push(fact('paces', c.spikes, 'Spike damage for every pace a creature walks', 'per pace'));
   if (c.barricades) out.push(fact(h('span.ic', { html: ICON.barr }), `+${c.barricades}`, 'Barricades', 'barricades'));
   return out;
 }
@@ -55,9 +58,7 @@ export class Desk {
     this.L.views.append(this.views.el);
     this.hand = card('hand', { tone: 'mid', label: 'Your cards' });
     this.L.hand.append(this.hand.root);
-    this.L.tools.append(
-      h('button.knob', { type: 'button', onclick: () => g.openMenu(), title: 'Menu (Esc)', 'aria-label': 'Menu', html: ICON.menu }),
-      h('button.knob', { type: 'button', onclick: () => g.openSettings(), title: 'Settings (O)', 'aria-label': 'Settings', html: ICON.gear }));
+    this.L.tools.append(h('button.knob', { type: 'button', onclick: () => g.openMenu(), title: 'Menu (Esc)', 'aria-label': 'Menu', html: ICON.menu }));
     this.time = card('time', { label: 'The night' });
     this.R.time.append(this.time.root);
     this.focus = card('focus', { tone: 'mid', label: 'Selected' });
@@ -76,7 +77,7 @@ export class Desk {
     this.views.select(s.ui.view);
     this.part('village', `${s.village.name}|${Math.floor(s.gold)}|${s.rerolls}|${s.meta.embers}|${s.meta.best}`, () => this.village.set({
       head: head(null, s.village.name, fact('ember', s.meta.embers, 'Embers: kept between runs', 'embers')),
-      content: h('div.res', {}, fact('coin', Math.floor(s.gold), 'Gold: for rerolls', 'gold', 'gold'), fact('repeat', s.rerolls, 'Free rerolls left this run', 'rerolls'), fact('moon', s.meta.best, 'The most nights held in one run', 'best')),
+      content: h('div.res', {}, fact('coin', Math.floor(s.gold), 'Gold: spend it at the Hearth, or on rerolls', 'gold', 'gold'), fact('repeat', s.rerolls, 'Free rerolls left this run', 'rerolls'), fact('moon', s.meta.best, 'The most nights held in one run', 'best')),
     }));
     this.refreshHand(s);
     this.refreshTime(s);
@@ -95,7 +96,11 @@ export class Desk {
         for (const id of s.cards) if (CARD[id].family === f) names[CARD[id].name] = (names[CARD[id].name] || 0) + 1;
         return h('div.handrow', { title: FAMILIES[f].plural }, famIcon(f), h('span.names', {}, Object.entries(names).map(([n, k]) => (k > 1 ? `${n} ×${k}` : n)).join(', ')));
       });
-      const syn = SYNERGIES.filter((x) => b.synergies.has(x.tag)).map((x) => h('span.chip.syn', { title: x.text }, x.name));
+      const syn = SYNERGIES.filter((x) => b.tags[x.tag]).map((x) => {
+        const k = b.tags[x.tag], t = b.tier[x.tag];
+        const next = t === 0 ? x.need : t === 1 ? x.need2 : null;
+        return h(`span.chip${t ? '.syn' : ''}${t === 2 ? '.max' : ''}`, { title: `${x.name}: ${x.text}${t ? '' : ` (at ${x.need})`}. At ${x.need2}: ${x.text2}` }, `${t ? x.name : TAG_NAMES[x.tag]}${next ? ` ${k}/${next}` : ' ★'}`);
+      });
       this.hand.set({ head: head('card', 'Your cards', h('b.count', {}, s.cards.length)), content: [h('div.list', {}, rows), syn.length ? h('div.chips', {}, syn) : null] });
     });
   }
@@ -104,22 +109,38 @@ export class Desk {
     if (s.phase === 'day') {
       const pv = nightPreview(s);
       const left = barricadeMax(s) - s.barricades.length;
-      this.part('time', `day:${s.night}:${left}:${s.ui.view}`, () => {
+      const ready = placesReady(s).length;
+      const sent = s.expedition === s.night;
+      const afford = affordableUpgrades(s).length;
+      this.part('time', `day:${s.night}:${left}:${s.ui.view}:${ready}:${sent}:${afford}`, () => {
         const comp = Object.entries(pv.comp).filter(([, k]) => k > 0);
         const boss = pv.comp.troll > 0;
+        // what is left to do before the night, in order; the first open one is "now"
+        const list = [
+          ready || sent ? { id: 'wilds', text: sent ? 'Expedition sent' : `Send an expedition (${ready} ${ready === 1 ? 'place' : 'places'})`, done: sent, title: 'In the Wilds, pick a place and send an expedition for its reward. One a day.' } : null,
+          { id: 'hearth', text: afford ? `Upgrade buildings (${afford} affordable)` : 'Nothing more to afford', done: !afford, title: 'In the Hearth, spend gold on the Great Tower, Walls, Workshop or Shrine.' },
+          { id: 'watch', text: left ? `Block paths (${left} left)` : 'Paths blocked', done: !left, title: 'In the Watch, click a path to put a barricade on it. Creatures walk round.' },
+        ].filter(Boolean);
+        const open = list.find((x) => !x.done);
+        if (open) open.now = true;
+        const items = [...list, { id: 'night', text: open ? 'Start the night' : 'Ready: start the night', now: !open, title: 'Press the seal or N' }];
         this.time.set({
           head: head('moon', `Night ${s.night}`, boss ? h('span.boss', { title: 'A boss comes tonight. Bosses can only walk roads.' }, 'Boss') : null),
           content: [
             facts(...comp.map(([t, k]) => fact(icon(t, 'mob'), k, '', `${(k === 1 ? ENEMIES[t].name : ENEMIES[t].plural).toLowerCase()}${pv.newEnemy === t ? ', new' : ''}`, pv.newEnemy === t || ENEMIES[t].boss ? 'red' : ''))),
             pv.newSpawn ? hint(`+ ${pv.newSpawn.name} opens`, 'red') : null,
-            steps([
-              { text: left ? `Block paths (${left} left)` : 'Paths blocked', done: !left, now: !!left, title: 'In the Watch, click a path to put a barricade on it. Creatures walk round.' },
-              { text: 'Start the night', now: !left, title: 'Press the seal or N' },
-            ]),
+            steps(items.map((x) => ({ ...x, onclick: x.id !== 'night' && !x.done ? () => this.g.setView(x.id) : null }))),
           ],
-          foot: action(seal('Night', () => this.g.callNight(), { title: 'Start the night (N)' }), s.ui.view !== 'watch' && left ? slip('Go to the Watch', () => this.g.setView('watch')) : hint(left ? 'Click a path' : 'Ready', 'soft')),
+          foot: action(seal('Night', () => this.g.callNight(), { title: 'Start the night (N)', cls: open ? '' : 'ready' }),
+            open && s.ui.view !== open.id ? slip(`Go to ${open.id[0].toUpperCase()}${open.id.slice(1)}`, () => this.g.setView(open.id)) : hint(open ? { wilds: 'Click a place', hearth: 'Click a building', watch: 'Click a path' }[open.id] : 'All done', 'soft')),
         });
       });
+    } else if (s.phase === 'bonus') {
+      this.part('time', `bonus:${s.night}`, () => this.time.set({
+        head: head('moon', 'Expedition back'),
+        content: hint('Choose a card from what they found', 'ink'),
+        foot: slip('Show the cards', () => this.draft()),
+      }));
     } else if (s.phase === 'starter') {
       this.part('time', 'starter', () => this.time.set({
         head: head('moon', 'A new run'),
@@ -185,21 +206,34 @@ export class Desk {
 
   refreshPlace(s) {
     const id = s.ui.place || null;
-    this.part('focus', `place|${id}|${s.village.name}|${s.best}`, () => {
-      const l = LOCATIONS.find((x) => x.id === id && x.found <= s.best);
+    this.part('focus', `place|${id}|${s.village.name}|${s.best}|${s.night}|${s.expedition}|${s.phase}|${JSON.stringify(s.rested || {})}`, () => {
+      const known = LOCATIONS.filter((x) => x.found <= s.best && x.reward);
       const next = LOCATIONS.filter((x) => x.found > s.best).sort((a, b) => a.found - b.found)[0];
-      if (!l) {
-        this.focus.set({ head: head('wilds', 'Wilds'), content: facts(fact('place', LOCATIONS.filter((x) => x.found <= s.best).length - 1, 'Places discovered this run', 'discovered'), next ? fact('moon', `Night ${next.found}`, 'Hold this night to discover the next place', 'next discovery') : null), foot: hint('Click a place') });
+      const sent = s.expedition === s.night;
+      const rewardFact = (l) => {
+        const r = rewardOf(l, s.night);
+        return r.gold ? fact('coin', `+${r.gold}`, 'Gold', 'gold', 'gold') : r.reroll ? fact('repeat', `+${r.reroll}`, 'Free rerolls', 'rerolls') : r.embers ? fact('ember', `+${r.embers}`, 'Embers, kept between runs', 'Embers') : fact('card', RARITY[r.card].name, `Choose one of three ${RARITY[r.card].name.toLowerCase()} or better cards`, 'card choice');
+      };
+      const status = (l) => ((s.rested?.[l.id] || 0) > s.night ? `Rests until night ${s.rested[l.id]}` : sent ? 'Tomorrow' : 'Ready');
+      const l = LOCATIONS.find((x) => x.id === id && x.found <= s.best);
+      if (!l || l.kind === 'home') {
+        // the overview: every known place, its reward, and whether it is ready
+        this.focus.set({
+          head: head('wilds', 'Expeditions', sent ? hint('Sent today') : null),
+          content: known.length
+            ? h('div.list.places', {}, known.map((x) => h(`button.prow${expeditionReady(s, x.id) && !sent ? '.ok' : ''}`, { type: 'button', onclick: () => this.g.selectPlace(x.id), title: x.reward.text }, h('span.pn', {}, x.name), rewardFact(x), h('span.ps', {}, status(x)))))
+            : hint('No places found yet', 'soft'),
+          foot: next ? hint(`Hold night ${next.found} to find another place`, 'soft') : null,
+        });
         return;
       }
-      if (l.kind === 'home') { this.focus.set({ head: head('place', s.village.name, hint('Home')), foot: slip('Watch', () => this.g.setView('watch')) }); return; }
+      const ready = expeditionReady(s, l.id);
+      const canSend = ready && !sent && s.phase === 'day';
       this.focus.set({
         head: head('place', l.name, null, { title: l.blurb }),
-        content: [
-          facts(h('span.fact.labelled', {}, icon('place'), h('span.v', {}, h('b', {}, LOCATION_KINDS[l.kind].name), h('span.lbl', {}, 'kind'))), l.difficulty ? h('span.fact.labelled', { title: `Danger ${l.difficulty} of 5` }, icon('danger'), h('span.v', {}, pips(l.difficulty), h('span.lbl', {}, 'danger'))) : null),
-          l.rewards ? chips(l.rewards) : null,
-        ],
-        foot: hint('Expeditions come in a later update', 'soft'),
+        content: [h('div.reward', {}, rewardFact(l), h('span.rt', {}, l.reward.text)), hint(`Rests ${l.reward.rest} nights after a visit`, 'soft')],
+        foot: canSend ? action(seal('Send', () => this.g.expedition(l.id), { title: 'Send the expedition: the reward comes at once' }), slip('All places', () => this.g.selectPlace(null)))
+          : h('div.row', {}, hint(s.phase !== 'day' ? 'Between nights only' : sent ? 'One expedition a day' : status(l), 'ink'), slip('All places', () => this.g.selectPlace(null))),
       });
     });
   }
@@ -207,20 +241,30 @@ export class Desk {
   refreshBuilding(s) {
     const id = s.ui.building || 'archery';
     const def = BUILDINGS[id];
-    this.part('focus', `bld|${id}|${s.cards.join(',')}`, () => {
+    const lv = s.upgrades?.[id] || 0;
+    const cost = upgradeCost(id, lv);
+    this.part('focus', `bld|${id}|${s.cards.join(',')}|${lv}|${Math.floor(s.gold) >= (cost ?? Infinity)}|${s.phase}`, () => {
       const b = build(s);
       const mine = s.cards.filter((c) => def.families.includes(CARD[c].family));
+      const P = magicScale(s.night);
       const stats = [];
-      if (id === 'archery') stats.push(fact('people', b.shooters.length - 1, 'Defenders on the tower', 'defenders'), fact('dmg', b.tower.dmg.toFixed(1), 'The tower’s own arrows', 'damage'), fact('reach', b.tower.range.toFixed(1), 'Reach', 'reach'), fact('rate', b.tower.rate.toFixed(2), 'Shots a second', 'per sec'));
-      if (id === 'walls') stats.push(fact('wall', b.walls.integrity, 'Strength, mended every dawn', 'strength'), fact('armor', b.walls.armor, 'Taken off every hit', 'armour'), b.walls.thorns ? fact('dmg', b.walls.thorns, 'Thorns: hurt every attacker', 'thorns') : null);
-      if (id === 'workshop') stats.push(fact(h('span.ic', { html: ICON.barr }), barricadeMax(s), 'Barricades', 'barricades'));
-      if (id === 'shrine') stats.push(fact('spark', b.active.length, 'Spells you cast', 'active'), fact('spark', b.auras.length, 'Spells that work on their own', 'passive'), fact('dmg', `×${magicScale(s.night).toFixed(1)}`, 'Spells grow stronger every night', 'tonight'));
+      if (id === 'archery') stats.push(fact('people', b.shooters.length - 1, 'Defenders on the tower', 'defenders'), fact('dmg', (b.tower.dmg * P).toFixed(0), 'The tower’s own arrows, tonight', 'damage'), fact('reach', b.tower.range.toFixed(1), 'Reach', 'reach'), fact('rate', b.tower.rate.toFixed(2), 'Shots a second', 'per sec'));
+      if (id === 'walls') stats.push(fact('wall', Math.round(b.walls.integrity * P), 'Strength tonight, mended every dawn', 'strength'), fact('armor', `${Math.round((1 - b.walls.taken) * 100)}%`, 'Taken off every hit', 'armour'), b.walls.thorns ? fact('dmg', Math.round(b.walls.thorns * P), 'Thorns: hurt every attacker', 'thorns') : null);
+      if (id === 'workshop') stats.push(fact(h('span.ic', { html: ICON.barr }), barricadeMax(s), 'Barricades', 'barricades'), b.spikes ? fact('paces', b.spikes.toFixed(2), 'Spike damage every pace', 'spikes') : null);
+      if (id === 'shrine') stats.push(fact('spark', b.active.length, 'Spells you cast', 'active'), fact('spark', b.auras.length, 'Spells that work on their own', 'passive'));
       const names = {};
       for (const c of mine) names[c] = (names[c] || 0) + 1;
+      const u = UPGRADES[id];
+      const canBuy = cost !== undefined && s.gold >= cost && s.phase === 'day';
       this.focus.set({
-        head: head('hearth', def.name, badge(mine.length, `${mine.length} cards`), { title: def.blurb }),
-        content: [facts(...stats), Object.keys(names).length ? h('div.chips', {}, Object.entries(names).map(([c, k]) => h('span.chip', { title: CARD[c].text }, k > 1 ? `${CARD[c].name} ×${k}` : CARD[c].name))) : null],
-        foot: mine.length ? null : hint(`${def.families.map((f) => FAMILIES[f].plural).join(' and ')} cards grow it`, 'soft'),
+        head: head('hearth', def.name, h('span.lvl', { title: `Level ${lv}` }, `Level ${lv}`), { title: def.blurb }),
+        content: [
+          h('div.upgrade', {}, h('span.ux', {}, h('b', {}, 'Upgrade: '), u.text), cost === undefined ? hint('Fully built', 'ink')
+            : h('button.buy', { type: 'button', disabled: !canBuy || null, onclick: () => this.g.upgrade(id), title: canBuy ? 'Build the next level' : s.phase !== 'day' ? 'Between nights only' : `Needs ${cost - Math.floor(s.gold)} more gold` }, h('span.ic', { html: ICON.coin }), String(cost))),
+          facts(...stats),
+          Object.keys(names).length ? h('div.chips', {}, Object.entries(names).map(([c, k]) => h('span.chip', { title: CARD[c].text }, k > 1 ? `${CARD[c].name} ×${k}` : CARD[c].name))) : null,
+        ],
+        foot: hint('Other buildings: click them in the glass', 'soft'),
       });
     });
   }
@@ -259,8 +303,9 @@ export class Desk {
   // ---------- the draft: three cards in the middle of the desk ----------
   draft() {
     const s = this.g.state;
-    if ((s.phase !== 'draft' && s.phase !== 'starter') || !s.offer) return;
+    if (!['draft', 'starter', 'bonus'].includes(s.phase) || !s.offer) return;
     const starter = s.phase === 'starter';
+    const bonus = s.phase === 'bonus';
     const b = build(s);
     const root = document.getElementById('overlay');
     const cardEl = (id) => {
@@ -268,8 +313,9 @@ export class Desk {
       const tagRow = c.tags.map((t) => {
         const syn = SYNERGIES.find((x) => x.tag === t);
         const have = (b.tags[t] || 0) + 1;
-        const done = syn && have >= syn.need;
-        return h(`span.chip${done ? '.syn' : ''}`, { title: syn ? `${syn.name}: ${syn.text}` : '' }, `${TAG_NAMES[t]} ${syn ? `${Math.min(have, syn.need)}/${syn.need}` : ''}`);
+        const goal = have <= syn.need ? syn.need : syn.need2;
+        const done = have >= syn.need;
+        return h(`span.chip${done ? '.syn' : ''}`, { title: `${syn.name} at ${syn.need}: ${syn.text}. At ${syn.need2}: ${syn.text2}` }, `${TAG_NAMES[t]} ${Math.min(have, goal)}/${goal}`);
       });
       return h(`button.tcard.fam-${c.family}.rar-${c.rarity}`, { type: 'button', onclick: () => this.g.pick(id) },
         h('span.band', {}, h('span', {}, FAMILIES[c.family].name), h('span.rar', {}, RARITY[c.rarity].name)),
@@ -281,7 +327,7 @@ export class Desk {
     };
     const rr = s.rerolls > 0 ? `Reroll (${s.rerolls} free)` : `Reroll: ${rerollCost(s)} gold`;
     const wrap = h('div.draft', {},
-      h('div.draft-head', {}, h('h2', {}, starter ? 'A new run' : `Night ${s.night - 1} held`), h('span.hint.ink', {}, starter ? 'Choose a card to start with' : 'Choose one card. It stays for the whole run')),
+      h('div.draft-head', {}, h('h2', {}, starter ? 'A new run' : bonus ? 'The expedition is back' : `Night ${s.night - 1} held`), h('span.hint.ink', {}, starter ? 'Choose a card to start with' : bonus ? 'Choose one of the cards they found' : 'Choose one card. It stays for the whole run')),
       h('div.draft-cards', {}, s.offer.map(cardEl)),
       h('div.row', { style: { justifyContent: 'center', gap: '14px' } }, slip(rr, () => this.g.reroll()), slip('Look at the globe first', () => { root.hidden = true; })));
     fill(root, wrap);
@@ -344,7 +390,7 @@ export class Desk {
         });
         const cards = UNLOCKS.filter((u) => u.kind === 'card').map((u) => {
           const c = CARD[u.card], cost = unlockCost(s, u.id);
-          return h(`div.unl.ucard.fam-${c.family}${cost === undefined ? '.have' : ''}`, {}, h('div.ut', {}, famIcon(c.family), h('b', {}, c.name), h('span.rar', {}, RARITY[c.rarity].name)), h('span.ux', {}, c.text),
+          return h(`div.unl.ucard.fam-${c.family}.rar-${c.rarity}${cost === undefined ? '.have' : ''}`, {}, h('div.ut', {}, famIcon(c.family), h('b', {}, c.name), h('span.rar', {}, RARITY[c.rarity].name)), h('span.ux', {}, c.text),
             cost === undefined ? h('span.owned', {}, 'In the deck') : h('button.buy', { type: 'button', disabled: cost > s.meta.embers || null, onclick: () => { this.g.buy(u.id); draw(); } }, h('span.ic', { html: ICON.ember }), String(cost)));
         });
         fill(body, h('div.unlocks', {},

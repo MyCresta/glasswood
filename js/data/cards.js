@@ -25,7 +25,7 @@ export const RARITY = {
 
 // What every run starts with.
 export const BASE = {
-  tower: { dmg: 4, range: 9.5, rate: 1, shots: 1 },
+  tower: { dmg: 7, range: 10, rate: 1, shots: 1 },
   walls: { integrity: 500, armor: 0, thorns: 0 },
   barricades: 2,
   rerolls: 2,
@@ -33,49 +33,57 @@ export const BASE = {
 
 const card = (id, family, rarity, name, text, tags, fx) => ({ id, family, rarity, name, text, tags, ...fx });
 
+// Every number here is for night 1. Everything the village does (damage,
+// walls, thorns, spells) grows by POWER_GROWTH a night, so no card fades.
+// Each card is worth taking on its own; its tags push a run in a direction.
 export const CARDS = [
-  // ----- defenders: each one is another shooter on the tower -----
-  card('archer', 'defender', 'common', 'Archer', 'Steady arrows at long reach', [], { shooter: { dmg: 4, rate: 1, range: 10 } }),
-  card('axe', 'defender', 'common', 'Axe Thrower', 'Heavy axes, short reach', ['iron'], { shooter: { dmg: 11, rate: 0.5, range: 6.5 } }),
-  card('hunter', 'defender', 'common', 'Hunter', 'Double damage to beasts', ['beast'], { shooter: { dmg: 4, rate: 1, range: 10.5, vsBeast: 2 } }),
-  card('crossbow', 'defender', 'rare', 'Crossbow', 'Bolts pierce a second creature', ['iron'], { shooter: { dmg: 9, rate: 0.45, range: 12, pierce: true } }),
-  card('mage', 'defender', 'rare', 'Mage', 'Fire that splashes nearby creatures', ['fire'], { shooter: { dmg: 6, rate: 0.6, range: 9, splash: 1.3, burn: 2 } }),
-  card('witch', 'defender', 'epic', 'Frost Witch', 'Chills a group, slowing it', ['frost'], { shooter: { dmg: 3, rate: 0.8, range: 9, splash: 1, slow: 0.4 } }),
+  // ----- defenders: each one another shooter on the tower -----
+  card('archer', 'defender', 'common', 'Archer', 'Steady arrows at long reach', ['bow'], { shooter: { dmg: 4.8, rate: 1, range: 10 } }),
+  card('hunter', 'defender', 'common', 'Hunter', 'Triple damage to wolves and trolls', ['bow'], { shooter: { dmg: 3.5, rate: 1, range: 11, vsBeast: 3 } }),
+  card('axe', 'defender', 'common', 'Axe Thrower', 'Heavy axes, short reach', ['iron'], { shooter: { dmg: 13, rate: 0.5, range: 7 } }),
+  card('crossbow', 'defender', 'rare', 'Crossbow', 'Bolts go through a second creature', ['iron', 'bow'], { shooter: { dmg: 11, rate: 0.55, range: 12, pierce: true } }),
+  card('mage', 'defender', 'rare', 'Mage', 'Fire that splashes and burns', ['fire'], { shooter: { dmg: 5.2, rate: 0.6, range: 9, splash: 1.8, burn: 2.5 } }),
+  card('witch', 'defender', 'epic', 'Frost Witch', 'Chills a group, slowing it', ['frost'], { shooter: { dmg: 5.5, rate: 0.8, range: 9.5, splash: 1.5, slow: 0.4 } }),
 
-  // ----- spells -----
-  card('firebolt', 'spell', 'common', 'Firebolt', 'Click the glass: fire bursts there', ['fire'], { spell: { active: true, cd: 12, radius: 1.6, dmg: 30, burn: 3 } }),
-  card('snare', 'spell', 'common', 'Root Snare', 'Click the glass: roots hold creatures still', ['nature'], { spell: { active: true, cd: 16, radius: 1.8, root: 3 } }),
-  card('mend', 'spell', 'rare', 'Mend Walls', 'Click: the walls regain a fifth', [], { spell: { active: true, cd: 24, mend: 0.2, self: true } }),
-  card('emberward', 'spell', 'rare', 'Ember Ward', 'Creatures at the walls burn', ['fire'], { spell: { aura: 'burn', dps: 5, radius: 4.6 } }),
-  card('frostward', 'spell', 'rare', 'Frost Ward', 'Creatures near the village slow down', ['frost'], { spell: { aura: 'slow', slow: 0.3, radius: 7 } }),
+  // ----- spells: a second copy makes the spell stronger -----
+  card('firebolt', 'spell', 'common', 'Firebolt', 'Click the glass: fire bursts there', ['fire'], { spell: { active: true, cd: 9, radius: 1.9, dmg: 50, burn: 4 } }),
+  card('snare', 'spell', 'common', 'Root Snare', 'Click the glass: roots hold creatures', ['frost'], { spell: { active: true, cd: 11, radius: 2.2, root: 5, dmg: 35 } }),
+  card('mend', 'spell', 'rare', 'Mend Walls', 'Click: the walls regain half', ['stone'], { spell: { active: true, cd: 14, mend: 0.5, self: true } }),
+  card('emberward', 'spell', 'rare', 'Ember Ward', 'Creatures near the walls burn', ['fire'], { spell: { aura: 'burn', dps: 7.5, radius: 5.5 } }),
+  card('frostward', 'spell', 'rare', 'Frost Ward', 'Creatures near the village slow down', ['frost'], { spell: { aura: 'slow', slow: 0.36, radius: 8.5 } }),
 
-  // ----- toolkit -----
-  card('barricade', 'toolkit', 'common', 'Barricade', 'One more barricade', ['iron'], { barricades: 1 }),
-  card('cart', 'toolkit', 'rare', 'Barricade Cart', 'Two more barricades', ['iron'], { barricades: 2 }),
+  // ----- toolkit: the paths -----
+  card('barricade', 'toolkit', 'common', 'Barricade', 'One more barricade, and stakes along the paths', ['maze'], { barricades: 1, spikes: 0.1 }),
+  card('spikes', 'toolkit', 'common', 'Spike Pits', 'Creatures are hurt for every pace they walk', ['maze'], { spikes: 0.25 }),
+  card('tar', 'toolkit', 'rare', 'Tar Paths', 'Creatures walk the paths 10% slower', ['maze', 'frost'], { tar: 0.1 }),
+  card('cart', 'toolkit', 'rare', 'Barricade Cart', 'Two more barricades, and stakes along the paths', ['maze'], { barricades: 2, spikes: 0.1 }),
 
-  // ----- fortify -----
-  card('footings', 'fortify', 'common', 'Stone Footings', 'Walls +250', [], { walls: { integrity: 250 } }),
-  card('palisade', 'fortify', 'common', 'Palisade', 'Walls +150, armour +1', ['nature'], { walls: { integrity: 150, armor: 1 } }),
-  card('irongate', 'fortify', 'rare', 'Iron Gate', 'Armour +2', ['iron'], { walls: { armor: 2 } }),
-  card('thorns', 'fortify', 'rare', 'Thorn Hedge', 'Attackers take 4 a hit', ['nature'], { walls: { thorns: 4 } }),
+  // ----- fortify: the walls hold, and hurt what hits them -----
+  card('footings', 'fortify', 'common', 'Stone Footings', 'Walls 2.3 times as strong', ['stone'], { walls: { integrity: 650 } }),
+  card('palisade', 'fortify', 'common', 'Palisade', 'Walls +50% and sharp stakes', ['stone'], { walls: { integrity: 250, thorns: 4 } }),
+  card('thorns', 'fortify', 'rare', 'Thorn Hedge', 'Attackers take damage every hit', ['stone'], { walls: { thorns: 12 } }),
+  card('irongate', 'fortify', 'rare', 'Iron Gate', 'Walls +40% and take a third less damage', ['iron', 'stone'], { walls: { armor: 5, integrity: 200 } }),
+  card('oil', 'fortify', 'rare', 'Boiling Oil', 'Burns creatures at the walls', ['fire', 'stone'], { walls: { oil: 5 } }),
 
-  // ----- tower -----
-  card('lookout', 'tower', 'common', 'Lookout', 'Reach +1.5 for every shooter', [], { tower: { range: 1.5 } }),
-  card('quick', 'tower', 'common', 'Quick Hands', 'The tower shoots 25% faster', [], { tower: { rate: 0.25 } }),
-  card('heavy', 'tower', 'common', 'Heavy Arrows', 'Tower arrows +30% damage', ['iron'], { tower: { dmg: 0.3 } }),
-  card('firearrows', 'tower', 'rare', 'Fire Arrows', 'Tower arrows +20% and burn', ['fire'], { tower: { dmg: 0.2, burn: 2 } }),
-  card('twin', 'tower', 'epic', 'Twin String', 'The tower looses two arrows', [], { tower: { shots: 1 } }),
+  // ----- tower: the Great Tower's own bow, and a little for everyone -----
+  card('lookout', 'tower', 'common', 'Lookout', 'Every shooter reaches further', ['bow'], { tower: { range: 2.2, dmg: 0.5 } }),
+  card('quick', 'tower', 'common', 'Quick Hands', 'The tower shoots 50% faster', ['bow'], { tower: { rate: 0.5 }, all: { rate: 0.05 } }),
+  card('heavy', 'tower', 'common', 'Heavy Arrows', 'Tower arrows +85% damage', ['iron'], { tower: { dmg: 0.85 }, all: { dmg: 0.06 } }),
+  card('firearrows', 'tower', 'rare', 'Fire Arrows', 'Every shooter sets creatures alight', ['fire'], { tower: { dmg: 0.4, burn: 1.5 }, all: { burn: 1.6 } }),
+  card('twin', 'tower', 'epic', 'Twin String', 'The tower looses two arrows at once', ['bow'], { tower: { shots: 1, dmg: 0.15 }, all: { dmg: 0.08 } }),
 ];
 
 export const CARD = Object.fromEntries(CARDS.map((c) => [c.id, c]));
 
 // A few cards with the same tag unlock a bonus for the rest of the run.
+// Two tiers: the first at `need` cards with the tag, the second at `need2`.
 export const SYNERGIES = [
-  { tag: 'fire', need: 3, name: 'Wildfire', text: 'All burning lasts twice as long and burns twice as hot' },
-  { tag: 'frost', need: 2, name: 'Deep Frost', text: 'Slows are half again as strong' },
-  { tag: 'iron', need: 3, name: 'Ironworks', text: 'Every shot ignores armour; walls armour +1' },
-  { tag: 'nature', need: 2, name: 'Overgrowth', text: 'Roots last longer; thorns hurt twice as much' },
-  { tag: 'beast', need: 2, name: 'Pack Sense', text: 'Every shooter does +50% to beasts' },
+  { tag: 'bow', need: 3, need2: 5, name: 'Volley', text: 'Every shooter shoots 35% faster', text2: '90% faster' },
+  { tag: 'fire', need: 3, need2: 5, name: 'Wildfire', text: 'All burning is twice as hot', text2: 'over three times as hot' },
+  { tag: 'frost', need: 2, need2: 4, name: 'Shatter', text: 'Slowed and rooted creatures take 40% more damage', text2: 'twice the damage' },
+  { tag: 'iron', need: 3, need2: 5, name: 'Ironworks', text: 'Shots ignore armour; every shooter +25% damage', text2: '+75% damage' },
+  { tag: 'stone', need: 3, need2: 5, name: 'Bulwark', text: 'Walls +25%; thorns and oil twice as strong', text2: 'walls +60%, three times as strong' },
+  { tag: 'maze', need: 2, need2: 4, name: 'Labyrinth', text: 'One more barricade; spikes 2.5 times as sharp', text2: 'two more, five times as sharp' },
 ];
 
-export const TAG_NAMES = { fire: 'Fire', frost: 'Frost', iron: 'Iron', nature: 'Nature', beast: 'Beast' };
+export const TAG_NAMES = { bow: 'Bow', fire: 'Fire', frost: 'Frost', iron: 'Iron', stone: 'Stone', maze: 'Maze' };

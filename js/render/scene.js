@@ -21,17 +21,18 @@ const R_HEARTH = R_WATCH * 8;               // and the village close-up roughly 
 // slides in from, and its content planes (finest last), each drawn at `mag` times
 // the globe with `anchor` being the village in that plane's own coordinates.
 const RIGS = {
-  watch: { k: 0.94, at: [624, 406], from: [300, 360], c: [LENS.x, LENS.y], mag: R_WATCH },
-  hearth: { k: 0.95, at: [642, 420], from: [-260, -420], c: [HEARTH.cx, HEARTH.cy], mag: R_HEARTH },
+  watch: { k: 0.94, at: [640, 424], from: [300, 360], c: [LENS.x, LENS.y], mag: R_WATCH },
+  hearth: { k: 0.95, at: [640, 424], from: [-260, -420], c: [HEARTH.cx, HEARTH.cy], mag: R_HEARTH },
 };
 const FRAME = {
   wilds: [GLOBE.x - 392, GLOBE.y - 392, 784, 800],
-  watch: [624 - 352, 406 - 352, 704, 716],
-  hearth: [642 - 410, 420 - 385, 820, 780],
+  watch: [640 - 352, 424 - 352, 704, 716],
+  hearth: [640 - 410, 424 - 385, 820, 780],
 };
 // Wide screens: the desk framed a little closer than the full artwork, so the
 // globe and its glasses sit large between the two columns of notes.
-const WIDE = [4, 32, 1312, 820];
+// Centred on the globe (640,424), which sits midway between the note columns.
+const WIDE = [-16, 14, 1312, 820];
 const ease = (t) => (t < 0 ? 0 : t > 1 ? 1 : t * t * (3 - 2 * t));
 const clamp01 = (t) => Math.max(0, Math.min(1, t));
 

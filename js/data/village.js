@@ -20,14 +20,14 @@ export const SPAWNS = [
 ];
 
 export const ENEMIES = {
-  troll: { name: 'Troll', plural: 'Trolls', hp: 110, speed: 0.75, dmg: 14, rate: 0.5, armor: 1, gold: 40, size: 0.55, first: 10, boss: true, sizeClass: 'large', blurb: 'Comes every tenth night. Too big for anything but the roads.' },
-  goblin: { name: 'Goblin', plural: 'Goblins', hp: 12, speed: 1.25, dmg: 4, rate: 1.0, armor: 0, gold: 2, size: 0.22, first: 1, sizeClass: 'small', blurb: 'Small, numerous and greedy. They hammer at the walls with whatever they found.' },
-  wolf: { name: 'Wolf', plural: 'Wolves', hp: 8, speed: 2.5, dmg: 3, rate: 1.25, armor: 0, gold: 3, size: 0.25, first: 3, beast: true, sizeClass: 'medium', blurb: 'Fast and fragile. They reach the walls long before the goblins.' },
+  troll: { name: 'Troll', plural: 'Trolls', hp: 220, speed: 0.75, dmg: 24, rate: 0.5, armor: 1, gold: 40, size: 0.55, first: 10, boss: true, sizeClass: 'large', blurb: 'Comes every tenth night. Too big for anything but the roads.' },
+  goblin: { name: 'Goblin', plural: 'Goblins', hp: 24, speed: 1.25, dmg: 10, rate: 1.0, armor: 0, gold: 2, size: 0.22, first: 1, sizeClass: 'small', blurb: 'Small, numerous and greedy. They hammer at the walls with whatever they found.' },
+  wolf: { name: 'Wolf', plural: 'Wolves', hp: 16, speed: 2.5, dmg: 7, rate: 1.25, armor: 0, gold: 3, size: 0.25, first: 3, beast: true, sizeClass: 'medium', blurb: 'Fast and fragile. They reach the walls long before the goblins.' },
 };
 
 export const SCALING = {
-  hp: 1.18, // per night
-  dmg: 1.05, // per night
+  hp: 1.2, // per night
+  dmg: 1.13, // per night: walls only grow with their own cards, so hits grow slower than health
   gold: 0.08, // +8% of base per night
 };
 

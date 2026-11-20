@@ -5,6 +5,7 @@ import { svgEl, f1 } from './watch.js';
 import { HOTSPOTS, HEARTH, SPRITES, FEET, VILLAGERS } from '../data/hotspots.js';
 import { BUILDINGS } from '../data/village.js';
 import { build, buildingStage } from '../sim/build.js';
+import { affordableUpgrades } from '../sim/run.js';
 import { CARD, FAMILIES } from '../data/cards.js';
 
 const FULL = { x: 236, y: 56, width: 800, height: 748 };
@@ -60,10 +61,10 @@ export class HearthView {
     const b = build(state);
     for (const id of this.order) {
       const s = this.sprites[id];
-      const st = buildingStage(b, id);
+      const st = buildingStage(state, id);
       if (st !== s.stage) { s.stage = st; s.img.setAttribute('href', `assets/b-${id}-${st}.webp`); }
     }
-    const ws = buildingStage(b, 'walls');
+    const ws = buildingStage(state, 'walls');
     if (ws !== this.wallStage) { this.wallStage = ws; this.walls.setAttribute('href', `assets/walls-${ws}.webp`); }
     this.syncPeople(state);
     this.syncTags(state);
@@ -72,13 +73,13 @@ export class HearthView {
   // every defender card is a figure on the tower
   syncPeople(state) {
     const defs = state.cards.filter((id) => CARD[id]?.family === 'defender');
-    const st = buildingStage(build(state), 'archery');
+    const st = buildingStage(state, 'archery');
     const key = `${defs.join(',')}|${st}`;
     if (key === this.peopleKey) return;
     this.peopleKey = key;
     this.people.replaceChildren();
     const [fx, fy] = FEET.archery;
-    const lift = [62, 78, 100][st];
+    const lift = [70, 112, 168][st]; // the platform of each stage (tools/design/hearth6.py TOWER_LIFT)
     defs.slice(0, POSTS.length).map((id, i) => [id, POSTS[i]]).sort((a, b) => a[1][1] - b[1][1]).forEach(([id, [dx, dy]]) => {
       const g = svgEl('g', { transform: `translate(${f1(fx + dx)} ${f1(fy - lift + dy)})` }, this.people);
       g.innerHTML = VILLAGERS[COLORS[id] ?? 0];
@@ -86,28 +87,34 @@ export class HearthView {
     });
   }
 
-  // a small paper tag at the foot of each building: its level, or that it is a ruin
+  // a small paper tag at the foot of each building: its level, and a coin
+  // when the next level can be bought
   syncTags(state) {
-    const counts = build(state).counts;
-    const num = (id) => BUILDINGS[id].families.reduce((a, f) => a + counts[f], 0);
-    const key = Object.keys(HOTSPOTS).map((id) => `${id}${num(id)}`).join('|');
+    const up = state.upgrades || {};
+    const can = new Set(state.phase === 'day' ? affordableUpgrades(state) : []);
+    const key = Object.keys(HOTSPOTS).map((id) => `${id}${up[id] || 0}${can.has(id) ? '$' : ''}`).join('|');
     if (key === this.tagKey) return;
     this.tagKey = key;
     this.tags.replaceChildren();
     for (const [id, spots] of Object.entries(HOTSPOTS)) {
       const [x, y] = spots[0];
       const name = BUILDINGS[id]?.name || id;
-      const lv = num(id);
-      const ruin = false;
-      const w = name.length * 7.6 + 46;
-      const g = svgEl('g', { transform: `translate(${f1(x)} ${f1(y + 10)}) rotate(${id.length % 2 ? -1.5 : 1.5})`, opacity: ruin ? 0.85 : 1 }, this.tags);
-      svgEl('rect', { x: -w / 2 + 1.5, y: 2, width: w, height: 22, fill: '#000', opacity: 0.35 }, g);
-      svgEl('rect', { x: -w / 2, y: 0, width: w, height: 22, fill: ruin ? '#a99470' : '#d9bf8c', stroke: '#5a4428', 'stroke-width': 0.8 }, g);
-      svgEl('circle', { cx: -w / 2 + 13, cy: 11, r: 8.5, fill: ruin ? '#6a5a44' : '#9e3426', stroke: ruin ? '#3a2e20' : '#5c1520' }, g);
+      const lv = up[id] || 0;
+      const w = name.length * 7.6 + 46 + (can.has(id) ? 24 : 0);
+      const g = svgEl('g', { transform: `translate(${f1(x)} ${f1(y + 10)})` }, this.tags);
+      svgEl('rect', { x: -w / 2 + 1.5, y: 2, width: w, height: 22, rx: 2, fill: '#000', opacity: 0.35 }, g);
+      svgEl('rect', { x: -w / 2, y: 0, width: w, height: 22, rx: 2, fill: '#e3cc9a', stroke: '#5a4428', 'stroke-width': 0.8 }, g);
+      svgEl('circle', { cx: -w / 2 + 13, cy: 11, r: 8.5, fill: lv ? '#9e3426' : '#7a6a54', stroke: '#3a1a12' }, g);
       const n = svgEl('text', { x: -w / 2 + 13, y: 15, 'text-anchor': 'middle', 'font-family': 'Fraunces, Georgia, serif', 'font-size': 11.5, 'font-weight': 600, fill: '#f6e2c0' }, g);
       n.textContent = lv;
-      const t = svgEl('text', { x: -w / 2 + 27, y: 16, 'font-family': 'Kalam, cursive', 'font-size': 14, fill: '#23170f' }, g);
+      const t = svgEl('text', { x: -w / 2 + 27, y: 16, 'font-family': "'Alegreya Sans', sans-serif", 'font-size': 14, 'font-weight': 600, fill: '#23170f' }, g);
       t.textContent = name;
+      if (can.has(id)) {
+        // a coin: this one can be upgraded now
+        const c = svgEl('g', { transform: `translate(${f1(w / 2 - 13)} 11)` }, g);
+        svgEl('circle', { r: 8, fill: '#f2c94c', stroke: '#7a5410', 'stroke-width': 1.4 }, c);
+        svgEl('path', { d: 'M0 -4 v8 M-3.5 -0.5 l3.5 -3.5 l3.5 3.5', stroke: '#7a5410', 'stroke-width': 1.6, fill: 'none', 'stroke-linecap': 'round' }, c);
+      }
     }
   }
 

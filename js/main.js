@@ -8,7 +8,8 @@ import { Audio } from './audio/audio.js';
 import { newGame, newRun } from './sim/state.js';
 import { makeEvents, pump, callNight } from './sim/time.js';
 import { placeBarricade, removeBarricade, barricadeBlocker } from './sim/village.js';
-import { pick, reroll, endRun, beginRun, buyUnlock } from './sim/run.js';
+import { pick, reroll, endRun, beginRun, buyUnlock, buyUpgrade, sendExpedition } from './sim/run.js';
+import { UPGRADES } from './sim/build.js';
 import { UNLOCK } from './data/unlocks.js';
 import { CARD } from './data/cards.js';
 import { castSpell } from './sim/battle.js';
@@ -45,7 +46,7 @@ function handleEvents(ev) {
   const ph = game.state.phase;
   if (ph !== game.shownPhase && !game.menuOpen) {
     game.shownPhase = ph;
-    if (ph === 'draft' || ph === 'starter') game.desk.draft();
+    if (ph === 'draft' || ph === 'starter' || ph === 'bonus') game.desk.draft();
     if (ph === 'over') game.desk.runOver();
     if (ph !== 'night') game.arm(null);
   }
@@ -71,6 +72,25 @@ game.pick = (id) => {
   }
   return r;
 };
+game.upgrade = (id) => {
+  const r = game.act((s) => buyUpgrade(s, id));
+  if (r.ok) {
+    game.desk.say('done', `${UPGRADES[id].name}, level ${r.level}: ${UPGRADES[id].text}`);
+    game.view.views.hearth.celebrate(id);
+    game.audio.play('upgrade');
+  }
+  return r;
+};
+game.expedition = (id) => {
+  const r = game.act((s) => sendExpedition(s, id));
+  if (r.ok) {
+    const w = r.reward;
+    game.desk.say('done', `${r.place.name}: ${w.gold ? `+${w.gold} gold` : w.reroll ? `+${w.reroll} free rerolls` : w.embers ? `+${w.embers} Embers` : 'choose a card'}`);
+    game.audio.play('build');
+  }
+  return r;
+};
+game.selectPlace = (id) => { game.state.ui.place = id; game.view.views.wilds.select(id); game.act(() => ({ ok: true })); };
 game.reroll = () => { const r = game.act((s) => reroll(s)); if (r.ok) game.desk.draft(); };
 game.newRun = (abandon = false) => {
   const s = game.state;

@@ -36,7 +36,7 @@ export function advance(state, seconds, ev) {
 
 export function callNight(state, ev) {
   if (state.phase === 'night') return { ok: false, reason: 'It is already night.' };
-  if (state.phase === 'draft' || state.phase === 'starter') return { ok: false, reason: 'Choose a card first.' };
+  if (state.phase === 'draft' || state.phase === 'starter' || state.phase === 'bonus') return { ok: false, reason: 'Choose a card first.' };
   if (state.phase === 'over') return { ok: false, reason: 'This run is over.' };
   startNight(state, ev);
   return { ok: true };

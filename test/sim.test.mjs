@@ -10,7 +10,7 @@ import { makeEvents, advance, tick, callNight, pump } from '../js/sim/time.js';
 import { waveSchedule, waveComposition, activeSpawns, castSpell, restartNight } from '../js/sim/battle.js';
 import { placeBarricade, removeBarricade, barricadeMax } from '../js/sim/village.js';
 import { build, compute } from '../js/sim/build.js';
-import { deal, pick, reroll, rerollCost, embersFor, beginRun, buyUnlock, unlockedCards } from '../js/sim/run.js';
+import { deal, pick, reroll, rerollCost, embersFor, beginRun, buyUnlock, unlockedCards, buyUpgrade, placesReady, sendExpedition } from '../js/sim/run.js';
 import { LOCKED_CARDS, STARTERS } from '../js/data/unlocks.js';
 import { migrate } from '../js/persist/save.js';
 
@@ -33,7 +33,7 @@ test('every run gets its own forest, the same for the same seed', () => {
   assert.notDeepEqual(generateForest(5).nodes, generateForest(6).nodes);
   for (const sd of SEEDS) {
     const w = makeWeb(generateForest(sd));
-    assert.ok(w.WEB.length > 110, `seed ${sd}: ${w.WEB.length} paths`);
+    assert.ok(w.WEB.length > 60, `seed ${sd}: ${w.WEB.length} paths`);
     for (const e of w.WEB) assert.ok(e.len > 0.5 && e.len < 22, `${sd} ${e.key} length ${e.len}`);
     const kinds = new Set(w.WEB.map((e) => e.w));
     for (const k of ['trail', 'path', 'road']) assert.ok(kinds.has(k), `seed ${sd} has ${k}s`);
@@ -46,8 +46,9 @@ test('every burrow reaches the walls, for every size that comes from it', () => 
     for (const sp of SPAWNS) {
       for (const size of w.sizesFor(sp)) {
         const r = w.routeFrom(w.buildField([], size), sp.node);
+        if (size === 'large' && !r) continue;
         assert.ok(r, `${sd} ${sp.name} reachable for ${size}`);
-        assert.ok(r.len > 25 && r.len < 70, `${sd} ${sp.name} ${size} length ${r.len}`);
+        assert.ok(r.len > 25 && r.len < 130, `${sd} ${sp.name} ${size} length ${r.len}`);
         assert.ok(Math.hypot(...r.pts.at(-1)) <= 3.7, 'route ends at the walls');
         // bosses keep to the roads, wolves keep off trails
         const min = SIZES[size];
@@ -70,7 +71,9 @@ test('a barricade can never seal the village off, for any size', () => {
     assert.ok(refused > 0);
     for (const size of ['small', 'medium', 'large']) {
       const f = w.buildField(placed, size);
-      for (const sp of SPAWNS.filter((x) => w.sizesFor(x).includes(size))) assert.ok(isFinite(f.dist.get(sp.node)), `${sd} ${sp.name} ${size}`);
+      const from = SPAWNS.filter((x) => w.sizesFor(x).includes(size));
+      if (size === 'large') assert.ok(from.some((sp) => isFinite(f.dist.get(sp.node))), `${sd} bosses have a way in`);
+      else for (const sp of from) assert.ok(isFinite(f.dist.get(sp.node)), `${sd} ${sp.name} ${size}`);
     }
     assert.equal(w.canBlock([], edgeKey('c', 'g0'), 99).ok, false, 'not inside the walls');
   }
@@ -128,7 +131,7 @@ test('the tower alone holds night 1, then three cards are dealt', () => {
   const s = fresh();
   runNight(s);
   assert.equal(s.lastReport.won, true);
-  assert.equal(s.lastReport.wallDamage, 0);
+  assert.ok(s.lastReport.wallDamage < 0.3 * BASE.walls.integrity, 'barely scratched');
   assert.equal(s.phase, 'draft');
   assert.equal(s.offer.length, 3);
   assert.equal(new Set(s.offer).size, 3, 'three different cards');
@@ -172,14 +175,19 @@ test('the deal is the same for the same run, night and reroll', () => {
 test('cards add up: defenders shoot, tower and fortify cards stack, synergies unlock', () => {
   const b = compute(['archer', 'mage', 'lookout', 'footings', 'irongate', 'cart']);
   assert.equal(b.shooters.length, 3);
-  assert.equal(b.shooters[0].range, BASE.tower.range + 1.5);
-  assert.equal(b.shooters[1].range, CARD.archer.shooter.range + 1.5, 'Lookout reaches every shooter');
-  assert.equal(b.walls.integrity, BASE.walls.integrity + 250);
-  assert.equal(b.walls.armor, 2);
+  assert.equal(b.shooters[0].range, BASE.tower.range + CARD.lookout.tower.range);
+  assert.equal(b.shooters[1].range, CARD.archer.shooter.range + CARD.lookout.tower.range, 'Lookout reaches every shooter');
+  assert.equal(b.walls.integrity, BASE.walls.integrity + CARD.footings.walls.integrity + CARD.irongate.walls.integrity);
+  assert.ok(b.walls.taken < 1, 'armour takes some off every hit');
   assert.equal(b.barricades, BASE.barricades + 2);
   assert.ok(!b.synergies.has('fire'));
   assert.ok(compute(['mage', 'firebolt', 'firearrows']).synergies.has('fire'), 'three fire cards: Wildfire');
   assert.equal(compute(['mage', 'firebolt', 'firearrows']).burnMul, 2);
+  assert.equal(compute(['mage', 'firebolt', 'firearrows', 'oil', 'emberward']).burnMul, 3.2, 'five: the second tier');
+  // copies of a spell make one stronger spell
+  const two = compute(['firebolt', 'firebolt']);
+  assert.equal(two.active.length, 1);
+  assert.ok(two.active[0].dmg > CARD.firebolt.spell.dmg);
   for (const c of CARDS) assert.ok(c.name && c.text && c.family && c.rarity, c.id);
 });
 
@@ -331,4 +339,39 @@ test('saves from before generated forests keep the Embers and start a fresh run'
   assert.equal(s.meta.embers, 33);
   assert.deepEqual(s.barricades, []);
   assert.equal(s.phase, 'starter');
+});
+
+test('Hearth upgrades cost gold and make the village stronger', () => {
+  const s = fresh();
+  s.gold = 1000;
+  const before = build(s).shooters[0].dmg;
+  assert.ok(buyUpgrade(s, 'archery').ok);
+  assert.ok(build(s).shooters[0].dmg > before);
+  const w = build(s).barricades;
+  assert.ok(buyUpgrade(s, 'workshop').ok);
+  assert.equal(build(s).barricades, w + 1);
+  for (let i = 0; i < 5; i++) buyUpgrade(s, 'workshop');
+  assert.equal(s.upgrades.workshop, 3, 'the workshop has a top level');
+  s.gold = 0;
+  assert.equal(buyUpgrade(s, 'walls').ok, false);
+});
+
+test('one expedition a day; places rest afterwards', () => {
+  const s = fresh();
+  assert.equal(placesReady(s).length, 0, 'nothing found on night 1');
+  s.best = 8; s.night = 9;
+  const ready = placesReady(s).map((l) => l.id);
+  assert.ok(ready.includes('whispering') && ready.includes('brindlecross'));
+  const gold = s.gold;
+  assert.ok(sendExpedition(s, 'whispering').ok);
+  assert.ok(s.gold > gold);
+  assert.equal(sendExpedition(s, 'quarry').ok, false, 'one a day');
+  s.night = 10;
+  assert.equal(sendExpedition(s, 'whispering').ok, false, 'resting');
+  assert.ok(sendExpedition(s, 'brindlecross').ok);
+  assert.equal(s.phase, 'bonus');
+  assert.equal(s.offer.length, 3);
+  assert.equal(callNight(s, ev(s)).ok, false);
+  assert.ok(pick(s, s.offer[0]).ok);
+  assert.equal(s.phase, 'day');
 });

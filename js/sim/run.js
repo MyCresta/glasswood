@@ -2,7 +2,10 @@
 // and the end of the run with its Embers.
 import { CARDS, CARD, RARITY } from '../data/cards.js';
 import { build } from './build.js';
+import { wallsMax } from './battle.js';
 import { UNLOCK, LOCKED_CARDS, STARTERS } from '../data/unlocks.js';
+import { UPGRADES, UPGRADE_IDS, upgradeCost } from './build.js';
+import { LOCATIONS } from '../data/world.js';
 
 function rng(seed) {
   let s = seed | 0;
@@ -23,9 +26,12 @@ export function rarityWeights(n) {
 export const unlockedCards = (state) => CARDS.filter((c) => !LOCKED_CARDS.has(c.id) || (state.meta.unlocks?.[`card:${c.id}`] || 0) > 0);
 export const unlockLevel = (state, id) => state.meta.unlocks?.[id] || 0;
 
-export function deal(state, salt = 0) {
-  const r = rng(state.seed ^ Math.imul(state.night, 9973) ^ Math.imul(salt + 1, 7919));
-  const w = rarityWeights(state.night);
+const RANK = { common: 0, rare: 1, epic: 2 };
+
+export function deal(state, salt = 0, min = state.phase === 'bonus' ? state.bonusMin : null) {
+  const r = rng(state.seed ^ Math.imul(state.night, 9973) ^ Math.imul(salt + 1, 7919) ^ (min ? 0x5bd1 : 0));
+  const w = { ...rarityWeights(state.night) };
+  if (min) for (const k of Object.keys(w)) if (RANK[k] < RANK[min]) w[k] = 0;
   const starter = state.phase === 'starter';
   const avail = starter ? unlockedCards(state).filter((c) => STARTERS.includes(c.id)) : unlockedCards(state);
   const n = starter && unlockLevel(state, 'wider') ? 4 : 3;
@@ -43,7 +49,7 @@ export function deal(state, salt = 0) {
 export const rerollCost = (state) => 10 + 3 * state.night;
 
 export function reroll(state) {
-  if (state.phase !== 'draft' && state.phase !== 'starter') return { ok: false, reason: 'Nothing to reroll.' };
+  if (!['draft', 'starter', 'bonus'].includes(state.phase)) return { ok: false, reason: 'Nothing to reroll.' };
   if (state.rerolls > 0) state.rerolls -= 1;
   else {
     const cost = rerollCost(state);
@@ -56,11 +62,11 @@ export function reroll(state) {
 }
 
 export function pick(state, id) {
-  if ((state.phase !== 'draft' && state.phase !== 'starter') || !state.offer?.includes(id)) return { ok: false, reason: 'That card is not on offer.' };
+  if (!['draft', 'starter', 'bonus'].includes(state.phase) || !state.offer?.includes(id)) return { ok: false, reason: 'That card is not on offer.' };
   state.cards.push(id);
   state.offer = null;
   state.phase = 'day';
-  state.integrity = build(state).walls.integrity;
+  state.integrity = wallsMax(state, state.night);
   return { ok: true, card: CARD[id] };
 }
 
@@ -101,4 +107,57 @@ export function beginRun(state) {
   state.phase = 'starter';
   state.offerSalt = 0;
   state.offer = deal(state);
+}
+
+// ---------- camp: Hearth upgrades for gold ----------
+export function buyUpgrade(state, id) {
+  if (state.phase !== 'day') return { ok: false, reason: 'Upgrades are built between nights.' };
+  if (!UPGRADES[id]) return { ok: false, reason: 'There is no such building.' };
+  state.upgrades ||= {};
+  const lv = state.upgrades[id] || 0;
+  const cost = upgradeCost(id, lv);
+  if (cost === undefined) return { ok: false, reason: 'Fully built.' };
+  if (state.gold < cost) return { ok: false, reason: `Needs ${cost - state.gold} more gold.` };
+  state.gold -= cost;
+  state.upgrades[id] = lv + 1;
+  return { ok: true, level: lv + 1 };
+}
+
+export const affordableUpgrades = (state) => UPGRADE_IDS.filter((id) => {
+  const c = upgradeCost(id, state.upgrades?.[id] || 0);
+  return c !== undefined && c <= state.gold;
+});
+
+// ---------- camp: one expedition into the Wilds ----------
+export const expeditionReady = (state, id) => {
+  const l = LOCATIONS.find((x) => x.id === id);
+  return !!l?.reward && l.found <= state.best && (state.rested?.[id] || 0) <= state.night;
+};
+export const placesReady = (state) => LOCATIONS.filter((l) => expeditionReady(state, l.id));
+
+// What a place gives tonight, as plain data.
+export function rewardOf(l, night) {
+  const r = l.reward;
+  return r.gold ? { ...r, gold: Math.round(r.gold[0] + r.gold[1] * night) } : r;
+}
+
+export function sendExpedition(state, id) {
+  if (state.phase !== 'day') return { ok: false, reason: 'Expeditions leave between nights.' };
+  if (state.expedition === state.night) return { ok: false, reason: 'One expedition each day. The next can go after the night.' };
+  if (!expeditionReady(state, id)) return { ok: false, reason: 'That place is not ready.' };
+  const l = LOCATIONS.find((x) => x.id === id);
+  const r = rewardOf(l, state.night);
+  state.expedition = state.night;
+  state.rested ||= {};
+  state.rested[id] = state.night + l.reward.rest;
+  if (r.gold) state.gold += r.gold;
+  if (r.reroll) state.rerolls += r.reroll;
+  if (r.embers) state.meta.embers += r.embers;
+  if (r.card) {
+    state.phase = 'bonus';
+    state.bonusMin = r.card;
+    state.offerSalt = 0;
+    state.offer = deal(state, 0, r.card);
+  }
+  return { ok: true, reward: r, place: l };
 }

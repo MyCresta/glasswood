@@ -22,6 +22,9 @@ export function runFields(seed = Math.floor(Math.random() * 2 ** 31), now = Date
     cards: [],
     offer: null,
     rerolls: BASE.rerolls + (unlocks.reroll || 0),
+    upgrades: {}, // Hearth upgrades bought with gold this run
+    expedition: null, // { place, night } the expedition sent this camp
+    rested: {}, // place id -> the night it can be visited again
     battle: null,
     lastReport: null,
     stats: { kills: 0, goldEarned: 0, nightsWon: 0 },

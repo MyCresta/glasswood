@@ -10,7 +10,7 @@
 #   hearth-frame.svg   the loupe's rim, glass and jointed arm (drawn above the notes)
 #   ../../js/render/defs.js and ../../js/data/hotspots.js
 import os, json, random, math
-import desk as D, scene5 as S5, make4 as M4, hearth3 as H3, hearth4 as H4, hearth5 as H5, globe6 as G6
+import desk as D, scene5 as S5, make4 as M4, hearth3 as H3, hearth4 as H4, hearth6 as H5, globe6 as G6
 W,H=1440,900
 OUT=os.path.join(os.path.dirname(os.path.abspath(__file__)),'..','..','assets')
 JS=os.path.join(os.path.dirname(os.path.abspath(__file__)),'..','..','js')

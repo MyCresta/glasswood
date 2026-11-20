@@ -11,6 +11,8 @@ export const UNLOCKS = [
   { id: 'card:emberward', kind: 'card', card: 'emberward', costs: [10] },
   { id: 'card:irongate', kind: 'card', card: 'irongate', costs: [8] },
   { id: 'card:thorns', kind: 'card', card: 'thorns', costs: [8] },
+  { id: 'card:oil', kind: 'card', card: 'oil', costs: [10] },
+  { id: 'card:tar', kind: 'card', card: 'tar', costs: [10] },
   { id: 'card:cart', kind: 'card', card: 'cart', costs: [12] },
   { id: 'card:twin', kind: 'card', card: 'twin', costs: [20] },
 ];
@@ -18,4 +20,4 @@ export const UNLOCK = Object.fromEntries(UNLOCKS.map((u) => [u.id, u]));
 // cards that must be bought with Embers before they are dealt
 export const LOCKED_CARDS = new Set(UNLOCKS.filter((u) => u.kind === 'card').map((u) => u.card));
 // the cards a run can start with
-export const STARTERS = ['archer', 'axe', 'hunter', 'mage', 'firebolt', 'snare', 'palisade', 'footings', 'lookout', 'heavy', 'barricade', 'quick'];
+export const STARTERS = ['archer', 'axe', 'hunter', 'mage', 'firebolt', 'snare', 'palisade', 'spikes', 'lookout', 'heavy', 'barricade', 'quick'];
