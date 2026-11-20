@@ -6,6 +6,7 @@
 // globe itself, enlarged. Switching views brings a glass over the globe and then
 // zooms through it, from the globe to the forest map to the village.
 import { DEFS } from './defs.js';
+import { MINI_AT } from './forest-art.js';
 import { svgEl, WatchView, LENS } from './watch.js';
 import { WildsView } from './wilds.js';
 import { HearthView } from './hearth.js';
@@ -46,7 +47,7 @@ function layerSvg(stage, cls, before = null) {
 
 // Big images decode the first time they are drawn, which would stall the first
 // zoom; decode them up front instead.
-const IMAGES = ['desk', 'globe-base', 'globe-terrain', 'watch', 'watch-frame', 'hearth-base', 'hearth-front', 'walls-0', 'hearth-frame'].map((n) => `assets/${n}.webp`);
+const IMAGES = ['desk', 'globe-base', 'globe-terrain', 'watch-frame', 'hearth-base', 'hearth-front', 'walls-0', 'hearth-frame'].map((n) => `assets/${n}.webp`);
 export function preloadImages() {
   return Promise.all(IMAGES.map((src) => { const i = new Image(); i.src = src; return i.decode().catch(() => {}); }));
 }
@@ -67,11 +68,13 @@ class Rig {
     this.g = svgEl('g', {}, this.svg);
     this.inner = svgEl('g', { 'clip-path': `url(#rigclip-${name})` }, this.g);
     // plane 1: the globe's own terrain, magnified
-    this.globe = svgEl('image', { href: 'assets/globe-terrain.webp', x: 290, y: 74, width: 700, height: 700 }, this.inner);
+    this.globe = svgEl('g', {}, this.inner);
+    svgEl('image', { href: 'assets/globe-terrain.webp', x: 290, y: 74, width: 700, height: 700 }, this.globe);
+    svgEl('image', { class: 'forest-mini', ...MINI_AT }, this.globe);
     this.planes = [{ el: this.globe, mag: 1, anchor: V }];
     if (name === 'hearth') {
       // plane 2: the forest map, between the globe and the village
-      const wm = svgEl('image', { href: 'assets/watch.webp', x: 280, y: 60, width: 700, height: 700 }, this.inner);
+      const wm = svgEl('image', { class: 'forest-map', x: 280, y: 60, width: 700, height: 700 }, this.inner);
       this.planes.push({ el: wm, mag: R_WATCH, anchor: [LENS.x, LENS.y], fadeIn: [0.08, 0.32], cover: 350 / 430 });
     }
     // the last plane is the view's own content (map or village, with everything live)
@@ -151,6 +154,7 @@ export class Scene {
     svgEl('image', { href: 'assets/desk.webp', x: -800, y: -400, width: 3040, height: 1700 }, svg);
     svgEl('image', { href: 'assets/globe-base.webp', x: 0, y: 0, width: 1440, height: 900 }, svg);
     svgEl('image', { href: 'assets/globe-terrain.webp', x: 290, y: 74, width: 700, height: 700 }, svg);
+    svgEl('image', { class: 'forest-mini', ...MINI_AT }, svg);
     svgEl('image', { href: 'assets/globe-glass.svg', x: 0, y: 0, width: 1440, height: 900 }, svg);
     // the tags of the Wilds fade on their own layer
     this.wildsSvg = layerSvg(stage, 'wilds-svg', null);

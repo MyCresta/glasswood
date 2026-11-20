@@ -5,15 +5,15 @@ import { BASE, CARD, SYNERGIES } from '../data/cards.js';
 const cache = new WeakMap();
 
 export function build(state) {
-  const key = state.cards.join(',');
+  const key = `${state.cards.join(',')}|${state.bonus?.walls || 0}`;
   const hit = cache.get(state);
   if (hit && hit.key === key) return hit.b;
-  const b = compute(state.cards);
+  const b = compute(state.cards, state.bonus);
   cache.set(state, { key, b });
   return b;
 }
 
-export function compute(ids) {
+export function compute(ids, bonus = {}) {
   const cards = ids.map((id) => CARD[id]).filter(Boolean);
   const tags = {};
   const counts = { defender: 0, spell: 0, toolkit: 0, fortify: 0, tower: 0 };
@@ -22,6 +22,7 @@ export function compute(ids) {
 
   const tower = { ...BASE.tower, burn: 0 };
   const walls = { ...BASE.walls };
+  walls.integrity += bonus.walls || 0;
   let barricades = BASE.barricades;
   let reach = 0, dmgMul = 1, rateMul = 1;
   for (const c of cards) {

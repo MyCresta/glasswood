@@ -1,7 +1,8 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { newGame, newRun } from '../js/sim/state.js';
-import { WEB, EDGE, edgeKey, buildField, routeFrom, routeForSpawn, canBlock, routeLengths } from '../js/sim/web.js';
+import { edgeKey, makeWeb, webFor, SIZES } from '../js/sim/web.js';
+import { generateForest } from '../js/sim/forest.js';
 import { SPAWNS } from '../js/data/village.js';
 import { BASE, CARD, CARDS } from '../js/data/cards.js';
 import { discovered } from '../js/data/world.js';
@@ -9,7 +10,8 @@ import { makeEvents, advance, tick, callNight, pump } from '../js/sim/time.js';
 import { waveSchedule, waveComposition, activeSpawns, castSpell, restartNight } from '../js/sim/battle.js';
 import { placeBarricade, removeBarricade, barricadeMax } from '../js/sim/village.js';
 import { build, compute } from '../js/sim/build.js';
-import { deal, pick, reroll, rerollCost, embersFor } from '../js/sim/run.js';
+import { deal, pick, reroll, rerollCost, embersFor, beginRun, buyUnlock, unlockedCards } from '../js/sim/run.js';
+import { LOCKED_CARDS, STARTERS } from '../js/data/unlocks.js';
 import { migrate } from '../js/persist/save.js';
 
 const fresh = () => newGame({ seed: 7, now: 0 });
@@ -24,58 +26,74 @@ const runNight = (s) => {
 // a run holding `n` extra barricade cards
 const withCards = (s, n) => { for (let i = 0; i < n; i++) s.cards.push('barricade'); return s; };
 
-test('the path web matches the design', () => {
-  assert.equal(WEB.length, 111);
-  for (const e of WEB) assert.ok(e.len > 0.5 && e.len < 20, `${e.key} length ${e.len}`);
-});
+const SEEDS = [1, 2, 3, 7, 42, 99, 1234, 98765, 31337, 2026];
 
-test('every burrow has a route to the walls', () => {
-  const f = buildField();
-  for (const sp of SPAWNS) {
-    const r = routeFrom(f, sp.node);
-    assert.ok(r, `${sp.name} reachable`);
-    assert.ok(r.len > 25 && r.len < 50, `${sp.name} length ${r.len}`);
-    const [x, z] = r.pts.at(-1);
-    assert.ok(Math.hypot(x, z) <= 3.7, 'route ends at the walls');
+test('every run gets its own forest, the same for the same seed', () => {
+  assert.deepEqual(generateForest(5), generateForest(5));
+  assert.notDeepEqual(generateForest(5).nodes, generateForest(6).nodes);
+  for (const sd of SEEDS) {
+    const w = makeWeb(generateForest(sd));
+    assert.ok(w.WEB.length > 110, `seed ${sd}: ${w.WEB.length} paths`);
+    for (const e of w.WEB) assert.ok(e.len > 0.5 && e.len < 22, `${sd} ${e.key} length ${e.len}`);
+    const kinds = new Set(w.WEB.map((e) => e.w));
+    for (const k of ['trail', 'path', 'road']) assert.ok(kinds.has(k), `seed ${sd} has ${k}s`);
   }
 });
 
-test('every node of the web connects to the village', () => {
-  const f = buildField();
-  const nodes = new Set(WEB.flatMap((e) => [e.a, e.b]));
-  for (const n of nodes) assert.ok(isFinite(f.dist.get(n)), n);
+test('every burrow reaches the walls, for every size that comes from it', () => {
+  for (const sd of SEEDS) {
+    const w = makeWeb(generateForest(sd));
+    for (const sp of SPAWNS) {
+      for (const size of w.sizesFor(sp)) {
+        const r = w.routeFrom(w.buildField([], size), sp.node);
+        assert.ok(r, `${sd} ${sp.name} reachable for ${size}`);
+        assert.ok(r.len > 25 && r.len < 70, `${sd} ${sp.name} ${size} length ${r.len}`);
+        assert.ok(Math.hypot(...r.pts.at(-1)) <= 3.7, 'route ends at the walls');
+        // bosses keep to the roads, wolves keep off trails
+        const min = SIZES[size];
+        for (let i = 1; i < r.nodes.length; i++) assert.ok(w.EDGE.get(edgeKey(r.nodes[i - 1], r.nodes[i])).wi >= min);
+      }
+    }
+    const f = w.buildField();
+    for (const n of Object.keys(w.NODES)) assert.ok(isFinite(f.dist.get(n)), `${sd} ${n} connects`);
+  }
 });
 
-test('the design detour: four barricades send Hollow Gate goblins the whole way round', () => {
-  const blocked = ['a0|b15', 'a3|b4', 'a9|b12', 'a6|gS'].map((k) => { const [a, b] = k.split('|'); return edgeKey(a, b); });
-  for (const k of blocked) assert.ok(EDGE.has(k), k);
-  const before = routeLengths([]).hollow;
-  const after = routeLengths(blocked).hollow;
-  assert.ok(before > 35 && before < 46, `before ${before}`);
-  assert.ok(after > before * 2.4, `after ${after}`);
+test('a barricade can never seal the village off, for any size', () => {
+  for (const sd of SEEDS) {
+    const w = makeWeb(generateForest(sd));
+    const placed = [];
+    let refused = 0;
+    // greedily try to block everything, outside in
+    const keys = w.WEB.filter((e) => e.a !== 'c' && e.b !== 'c').map((e) => e.key);
+    for (const k of keys) { const r = w.canBlock(placed, k, 999); if (r.ok) placed.push(k); else refused++; }
+    assert.ok(refused > 0);
+    for (const size of ['small', 'medium', 'large']) {
+      const f = w.buildField(placed, size);
+      for (const sp of SPAWNS.filter((x) => w.sizesFor(x).includes(size))) assert.ok(isFinite(f.dist.get(sp.node)), `${sd} ${sp.name} ${size}`);
+    }
+    assert.equal(w.canBlock([], edgeKey('c', 'g0'), 99).ok, false, 'not inside the walls');
+  }
 });
 
-test('a barricade can never seal the village off', () => {
-  // closing both gates would seal everything: the second one must be refused
-  const gates = WEB.filter((e) => (e.a === 'gN' || e.b === 'gN' || e.a === 'gS' || e.b === 'gS') && e.a !== 'c' && e.b !== 'c').map((e) => e.key);
+test('barricades lengthen routes', () => {
+  const w = makeWeb(generateForest(11));
+  const sp = SPAWNS[0];
+  const before = w.routeLengths([]).hollow;
+  const r = w.routeFrom(w.buildField([]), sp.node);
+  // block the first blockable edge of the route
   const placed = [];
-  let refused = null;
-  for (const k of gates) {
-    const r = canBlock(placed, k, 99);
-    if (r.ok) placed.push(k); else { refused = r; break; }
+  for (let i = 1; i < r.nodes.length && !placed.length; i++) {
+    const k = edgeKey(r.nodes[i - 1], r.nodes[i]);
+    if (w.canBlock([], k, 9).ok) placed.push(k);
   }
-  assert.ok(refused, 'one gate road stays open');
-  assert.match(refused.reason, /seal the village off/);
-  const f = buildField(placed);
-  for (const sp of SPAWNS) assert.ok(isFinite(f.dist.get(sp.node)), sp.name);
-  // and nothing inside the walls can be blocked
-  assert.equal(canBlock([], edgeKey('c', 'gN'), 99).ok, false);
+  assert.ok(w.routeLengths(placed).hollow > before);
 });
 
 test('barricades: as many as the cards allow, only between nights, and they change the route', () => {
   const s = fresh();
   assert.equal(barricadeMax(s), BASE.barricades);
-  const k = edgeKey('a0', 'b15');
+  const k = webFor(s).WEB.find((e) => e.a.startsWith('d') && e.b.startsWith('d')).key;
   assert.ok(placeBarricade(s, k).ok);
   assert.equal(placeBarricade(s, k).ok, false, 'not twice');
   withCards(s, 1);
@@ -239,4 +257,78 @@ test('deterministic, and survives JSON round-trips', () => {
   runNight(b);
   assert.equal(a.gold, b.gold);
   assert.deepEqual(a.offer, b.offer);
+});
+
+test('a run starts with a choice of starter card', () => {
+  const s = fresh();
+  beginRun(s);
+  assert.equal(s.phase, 'starter');
+  assert.equal(s.offer.length, 3);
+  for (const id of s.offer) assert.ok(STARTERS.includes(id), id);
+  assert.equal(callNight(s, ev(s)).ok, false, 'no night before a card');
+  assert.ok(pick(s, s.offer[0]).ok);
+  assert.equal(s.phase, 'day');
+  assert.equal(s.cards.length, 1);
+});
+
+test('locked cards are never dealt until bought with Embers', () => {
+  const s = fresh();
+  for (let night = 1; night < 60; night++) {
+    s.night = night;
+    for (const id of deal(s, night)) assert.ok(!LOCKED_CARDS.has(id), `${id} dealt while locked`);
+  }
+  assert.equal(buyUnlock(s, 'card:witch').ok, false, 'no Embers yet');
+  s.meta.embers = 100;
+  assert.ok(buyUnlock(s, 'card:witch').ok);
+  assert.equal(s.meta.embers, 84);
+  assert.ok(unlockedCards(s).some((c) => c.id === 'witch'));
+  assert.equal(buyUnlock(s, 'card:witch').ok, false, 'only once');
+});
+
+test('boosts carry into the next run', () => {
+  const s = fresh();
+  s.meta.embers = 200;
+  for (const id of ['reroll', 'walls', 'purse', 'wider']) assert.ok(buyUnlock(s, id).ok, id);
+  newRun(s, 3, 0);
+  assert.equal(s.rerolls, BASE.rerolls + 1);
+  assert.equal(s.gold, 55);
+  assert.equal(build(s).walls.integrity, BASE.walls.integrity + 100);
+  assert.equal(s.integrity, BASE.walls.integrity + 100);
+  beginRun(s);
+  assert.equal(s.offer.length, 4, 'wider choice');
+});
+
+test('every tenth night a boss walks the roads', () => {
+  assert.equal(waveComposition(9).troll, 0);
+  assert.equal(waveComposition(10).troll, 1);
+  assert.equal(waveComposition(20).troll, 1);
+  assert.equal(waveComposition(40).troll, 2);
+  const s = fresh();
+  s.night = 10;
+  for (let i = 0; i < 6; i++) s.cards.push('heavy', 'archer');
+  const e = ev(s);
+  callNight(s, e);
+  const b = s.battle;
+  let seen = false, g = 0;
+  while (s.phase === 'night' && g++ < 40000) {
+    tick(s, 0.05, e);
+    for (const en of s.battle?.enemies || []) if (en.type === 'troll') {
+      seen = true;
+      const r = b.routes[`${en.spawn}:large`];
+      const w = webFor(s);
+      for (let i = 1; i < r.nodes.length; i++) assert.equal(w.EDGE.get(edgeKey(r.nodes[i - 1], r.nodes[i])).w === 'road' || r.nodes[i] === 'c' || r.nodes[i - 1] === 'c', true);
+    }
+  }
+  assert.ok(seen, 'a troll came');
+});
+
+test('saves from before generated forests keep the Embers and start a fresh run', () => {
+  const old = JSON.parse(JSON.stringify(fresh()));
+  old.version = 6;
+  old.meta.embers = 33;
+  old.barricades = ['a0|b15'];
+  const s = migrate(old);
+  assert.equal(s.meta.embers, 33);
+  assert.deepEqual(s.barricades, []);
+  assert.equal(s.phase, 'starter');
 });

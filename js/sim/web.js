@@ -1,7 +1,10 @@
-// The path web: geometry of each path, routes to the village, and the rule
-// that barricades may never seal the village off.
-import { NODES, EDGES } from '../data/web.js';
+// The path web of a run's forest: geometry of each path, routes to the
+// village by creature size, and the rule that barricades may never seal the
+// village off, for any size of creature that can come from a burrow.
 import { SPAWNS, WALL_R } from '../data/village.js';
+import { generateForest, WIDTH, ROAD_BURROWS } from './forest.js';
+
+export const ROAD_SPAWNS = ROAD_BURROWS;
 
 export const edgeKey = (a, b) => (a < b ? `${a}|${b}` : `${b}|${a}`);
 const SAMPLES = 8; // per half of an edge
@@ -30,97 +33,112 @@ function polyLength(pts) {
   return L;
 }
 
-// Every edge with its sampled points (from a to b) and length.
-export const WEB = EDGES.map(([a, b, mid]) => {
-  const pts = sampleCurve([NODES[a], mid, NODES[b]]);
-  return { key: edgeKey(a, b), a, b, mid, pts, len: polyLength(pts) };
-});
-export const EDGE = new Map(WEB.map((e) => [e.key, e]));
-const ADJ = new Map();
-for (const e of WEB) {
-  if (!ADJ.has(e.a)) ADJ.set(e.a, []);
-  if (!ADJ.has(e.b)) ADJ.set(e.b, []);
-  ADJ.get(e.a).push(e);
-  ADJ.get(e.b).push(e);
-}
+// Which widths each size of creature can walk.
+export const SIZES = { small: 0, medium: 1, large: 2 };
+export const SIZE_NAMES = { small: 'small creatures', medium: 'wolves', large: 'bosses' };
 
-export function spawnNode(spawn) { return spawn.node; }
+export function makeWeb(forest) {
+  const NODES = forest.nodes;
+  const WEB = forest.edges.map(([a, b, mid, w]) => {
+    const pts = sampleCurve([NODES[a], mid, NODES[b]]);
+    return { key: edgeKey(a, b), a, b, mid, pts, len: polyLength(pts), w: w || 'path', wi: WIDTH[w || 'path'] };
+  });
+  const EDGE = new Map(WEB.map((e) => [e.key, e]));
+  const ADJ = new Map();
+  for (const e of WEB) {
+    if (!ADJ.has(e.a)) ADJ.set(e.a, []);
+    if (!ADJ.has(e.b)) ADJ.set(e.b, []);
+    ADJ.get(e.a).push(e);
+    ADJ.get(e.b).push(e);
+  }
+  // the sizes that can come from each burrow (bosses only from road burrows)
+  const sizesFor = (spawn) => (ROAD_BURROWS.includes(spawn.node) ? ['small', 'medium', 'large'] : ['small', 'medium']);
 
-// Shortest distance from every node to the village centre, avoiding blocked edges.
-export function buildField(blocked = []) {
-  const shut = new Set(blocked);
-  const dist = new Map([['c', 0]]);
-  const next = new Map();
-  const done = new Set();
-  const queue = [['c', 0]];
-  while (queue.length) {
-    let bi = 0;
-    for (let i = 1; i < queue.length; i++) if (queue[i][1] < queue[bi][1]) bi = i;
-    const [u, du] = queue.splice(bi, 1)[0];
-    if (done.has(u)) continue;
-    done.add(u);
-    for (const e of ADJ.get(u) || []) {
-      if (shut.has(e.key)) continue;
-      const v = e.a === u ? e.b : e.a;
-      const nd = du + e.len;
-      if (nd < (dist.get(v) ?? Infinity)) { dist.set(v, nd); next.set(v, u); queue.push([v, nd]); }
+  // Shortest distance from every node to the village centre, for one size of
+  // creature, avoiding blocked edges.
+  function buildField(blocked = [], size = 'small') {
+    const shut = new Set(blocked);
+    const min = SIZES[size];
+    const dist = new Map([['c', 0]]);
+    const next = new Map();
+    const done = new Set();
+    const queue = [['c', 0]];
+    while (queue.length) {
+      let bi = 0;
+      for (let i = 1; i < queue.length; i++) if (queue[i][1] < queue[bi][1]) bi = i;
+      const [u, du] = queue.splice(bi, 1)[0];
+      if (done.has(u)) continue;
+      done.add(u);
+      for (const e of ADJ.get(u) || []) {
+        if (shut.has(e.key) || e.wi < min) continue;
+        const v = e.a === u ? e.b : e.a;
+        const nd = du + e.len;
+        if (nd < (dist.get(v) ?? Infinity)) { dist.set(v, nd); next.set(v, u); queue.push([v, nd]); }
+      }
     }
+    return { dist, next, size };
   }
-  return { dist, next, blocked: [...shut].sort() };
-}
 
-let cached = null;
-export function fieldFor(blocked = []) {
-  const key = [...blocked].sort().join(',');
-  if (!cached || cached.key !== key) cached = { key, field: buildField(blocked) };
-  return cached.field;
-}
-
-// The nodes and points an enemy walks from a node to the walls.
-export function routeFrom(field, start) {
-  if (!isFinite(field.dist.get(start) ?? Infinity)) return null;
-  const nodes = [start];
-  const pts = [NODES[start]];
-  let u = start;
-  while (u !== 'c') {
-    const v = field.next.get(u);
-    const e = EDGE.get(edgeKey(u, v));
-    const seg = e.a === u ? e.pts : [...e.pts].reverse();
-    for (let i = 1; i < seg.length; i++) pts.push(seg[i]);
-    nodes.push(v);
-    u = v;
+  const cache = new Map();
+  function fieldFor(blocked = [], size = 'small') {
+    const k = `${size}:${[...blocked].sort().join(',')}`;
+    if (!cache.has(k)) { if (cache.size > 60) cache.clear(); cache.set(k, buildField(blocked, size)); }
+    return cache.get(k);
   }
-  // stop at the wall instead of the centre
-  let cut = pts.findIndex(([x, z]) => Math.hypot(x, z) <= WALL_R + 0.6);
-  if (cut < 0) cut = pts.length - 1;
-  const walk = pts.slice(0, cut + 1);
-  return { nodes, pts: walk, len: polyLength(walk) };
-}
 
-export function routeForSpawn(blocked, spawn) {
-  return routeFrom(fieldFor(blocked), spawn.node);
-}
-
-// Can this edge take a barricade, given the ones already placed?
-export function canBlock(barricades, key, max) {
-  const e = EDGE.get(key);
-  if (!e) return { ok: false, reason: 'There is no path there.' };
-  if (barricades.includes(key)) return { ok: false, reason: 'That path is already blocked.' };
-  if (e.a === 'c' || e.b === 'c') return { ok: false, reason: 'That is inside the walls.' };
-  if (barricades.length >= max) return { ok: false, reason: `All ${max} barricades are in use. Take one up first.` };
-  const field = buildField([...barricades, key]);
-  const sealed = SPAWNS.filter((s) => !isFinite(field.dist.get(s.node) ?? Infinity));
-  if (sealed.length) {
-    const names = sealed.map((s) => s.name).join(', ');
-    return { ok: false, reason: `That would seal the village off from ${names}. There must always be a way in.`, sealed: sealed.map((s) => s.id) };
+  function routeFrom(field, start) {
+    if (!isFinite(field.dist.get(start) ?? Infinity)) return null;
+    const nodes = [start];
+    const pts = [NODES[start]];
+    let u = start;
+    while (u !== 'c') {
+      const v = field.next.get(u);
+      const e = EDGE.get(edgeKey(u, v));
+      const seg = e.a === u ? e.pts : [...e.pts].reverse();
+      for (let i = 1; i < seg.length; i++) pts.push(seg[i]);
+      nodes.push(v);
+      u = v;
+    }
+    let cut = pts.findIndex(([x, z]) => Math.hypot(x, z) <= WALL_R + 0.6);
+    if (cut < 0) cut = pts.length - 1;
+    const walk = pts.slice(0, cut + 1);
+    return { nodes, pts: walk, len: polyLength(walk) };
   }
-  return { ok: true, field };
+
+  const routeForSpawn = (blocked, spawn, size = 'small') => routeFrom(fieldFor(blocked, size), spawn.node);
+
+  function canBlock(barricades, key, max) {
+    const e = EDGE.get(key);
+    if (!e) return { ok: false, reason: 'There is no path there.' };
+    if (barricades.includes(key)) return { ok: false, reason: 'That path is already blocked.' };
+    if (e.a === 'c' || e.b === 'c') return { ok: false, reason: 'That is inside the walls.' };
+    if (barricades.length >= max) return { ok: false, reason: `All ${max} barricades are in use. Take one up first.` };
+    const blocked = [...barricades, key];
+    for (const size of ['small', 'medium', 'large']) {
+      const field = buildField(blocked, size);
+      const sealed = SPAWNS.filter((s) => sizesFor(s).includes(size) && !isFinite(field.dist.get(s.node) ?? Infinity));
+      if (sealed.length) {
+        const names = sealed.map((s) => s.name).join(', ');
+        return { ok: false, reason: `That would seal the village off from ${names} for ${SIZE_NAMES[size]}. There must always be a way in.`, sealed: sealed.map((s) => s.id), size };
+      }
+    }
+    return { ok: true };
+  }
+
+  function routeLengths(blocked, size = 'small') {
+    const field = fieldFor(blocked, size);
+    const out = {};
+    for (const s of SPAWNS) out[s.id] = routeFrom(field, s.node)?.len ?? Infinity;
+    return out;
+  }
+
+  return { forest, NODES, WEB, EDGE, ADJ, ponds: forest.ponds, sizesFor, buildField, fieldFor, routeFrom, routeForSpawn, canBlock, routeLengths };
 }
 
-// How much longer each burrow's route becomes with a set of barricades.
-export function routeLengths(blocked) {
-  const field = fieldFor(blocked);
-  const out = {};
-  for (const s of SPAWNS) out[s.id] = routeFrom(field, s.node)?.len ?? Infinity;
-  return out;
+// The web of a run, made once per seed.
+let current = null;
+export function webForSeed(seed) {
+  if (!current || current.forest.seed !== seed) current = makeWeb(generateForest(seed));
+  return current;
 }
+export const webFor = (state) => webForSeed(state.seed);

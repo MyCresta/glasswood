@@ -1,11 +1,11 @@
 // The Watch view: the reading glass over the forest. The artwork under and over
 // the glass is pre-drawn (assets/); this module draws everything that changes:
 // burrow glows and tags, tonight's routes, barricades, creatures and arrows.
-import { NODES } from '../data/web.js';
 import { SPAWNS, ENEMIES } from '../data/village.js';
 import { build } from '../sim/build.js';
-import { WEB, EDGE, routeForSpawn, edgeKey } from '../sim/web.js';
-import { activeSpawns } from '../sim/battle.js';
+import { webFor, edgeKey } from '../sim/web.js';
+import { activeSpawns, waveComposition } from '../sim/battle.js';
+import { paintForest, PATH_W } from './forest-art.js';
 
 const NS = 'http://www.w3.org/2000/svg';
 export const LENS = { x: 630, y: 410, r: 350 };
@@ -43,7 +43,7 @@ export class WatchView {
     this.onEdge = onEdge;
     this.onEdgeHover = onEdgeHover;
     this.onSpawn = onSpawn;
-    svgEl('image', { href: 'assets/watch.webp', x: 280, y: 60, width: 700, height: 700 }, root);
+    svgEl('image', { class: 'forest-map', x: 280, y: 60, width: 700, height: 700 }, root);
     this.live = svgEl('g', { 'clip-path': 'url(#lensclip)' }, root);
     this.nightTint = svgEl('circle', { 'pointer-events': 'none', cx: LENS.x, cy: LENS.y, r: LENS.r, fill: '#1a1450', opacity: 0 }, this.live);
     this.glows = svgEl('g', { 'pointer-events': 'none',}, this.live);
@@ -62,22 +62,23 @@ export class WatchView {
     this.arrowEls = new Map();
     this.routeKey = null;
     this.t = 0;
-    this.buildEdges();
+    this.web = null;
     this.buildFireflies();
   }
 
   // Invisible fat strokes along every path, for clicking and hovering.
   buildEdges() {
-    for (const e of WEB) {
+    this.edges.replaceChildren();
+    for (const e of this.web.WEB) {
       if (e.a === 'c' || e.b === 'c') continue;
       const d = pathD(e.pts);
-      const hit = svgEl('path', { d, class: 'edge-hit', 'data-key': e.key }, this.edges);
+      const hit = svgEl('path', { d, class: 'edge-hit', 'data-key': e.key, 'stroke-width': Math.max(16, PATH_W[e.w] * S + 10) }, this.edges);
       const hint = svgEl('path', { d, class: 'edge-hint', fill: 'none', stroke: '#ffe08a', 'stroke-width': 4, 'stroke-linecap': 'round', 'stroke-dasharray': '1 7', opacity: 0, 'pointer-events': 'none' }, this.edges);
       hit.addEventListener('click', () => this.onEdge?.(e.key));
       hit.addEventListener('pointerenter', () => { hint.setAttribute('opacity', 1); this.onEdgeHover?.(e.key); });
       hit.addEventListener('pointerleave', () => { hint.setAttribute('opacity', 0); this.onEdgeHover?.(null); });
       const title = svgEl('title', {}, hit);
-      title.textContent = 'Block or open this path';
+      title.textContent = { trail: 'Trail: only small creatures fit', path: 'Path: wolves and smaller', road: 'Road: anything, even bosses' }[e.w];
     }
   }
 
@@ -94,9 +95,11 @@ export class WatchView {
 
   // Things that change with the game state but not every frame.
   sync(state, preview = null) {
+    const web = webFor(state);
+    if (web !== this.web) { this.web = web; this.buildEdges(); paintForest(web); this.routeKey = null; }
     const n = state.battle ? state.battle.n : state.night;
     const open = new Set(activeSpawns(n).map((s) => s.id));
-    const key = `${n}|${state.barricades.join(',')}|${state.phase}|${preview || ''}`;
+    const key = `${state.seed}|${n}|${state.barricades.join(',')}|${state.phase}|${preview || ''}`;
     if (key !== this.routeKey) {
       this.routeKey = key;
       this.drawGlowsAndTags(open, n);
@@ -110,7 +113,7 @@ export class WatchView {
     this.glows.replaceChildren();
     this.tags.replaceChildren();
     for (const sp of SPAWNS) {
-      const [X, Y] = T(...NODES[sp.node]);
+      const [X, Y] = T(...this.web.NODES[sp.node]);
       const isOpen = open.has(sp.id);
       if (isOpen) svgEl('circle', { cx: X, cy: Y, r: 40, fill: 'url(#vg)', class: 'burrow-glow' }, this.glows);
       // a pinned paper tag, inside the glass
@@ -142,7 +145,7 @@ export class WatchView {
     const keys = [...list];
     if (preview && !keys.includes(preview)) keys.push(preview);
     for (const k of keys) {
-      const e = EDGE.get(k);
+      const e = this.web.EDGE.get(k);
       if (!e) continue;
       const mid = e.pts[Math.floor(e.pts.length / 2)];
       const prev = e.pts[Math.floor(e.pts.length / 2) - 1];
@@ -156,29 +159,40 @@ export class WatchView {
     }
   }
 
-  // Tonight's routes as dotted gold; with a preview, the old routes as red dashes.
+  // Tonight's routes as marching dots (gold for goblins, blue where wolves
+  // go another way, red for a boss); with a preview, the old routes as dashes.
   drawRoutes(state, open, preview) {
     this.routes.replaceChildren();
     this.oldRoutes.replaceChildren();
     this.routeDots = [];
-    if (state.phase === 'night') return;
+    if (state.phase === 'night' || state.phase === 'over') return;
+    const web = this.web;
+    const n = state.night;
+    const comp = waveComposition(n);
     const blocked = preview && !state.barricades.includes(preview) ? [...state.barricades, preview] : state.barricades;
+    const sizes = [['small', '#ffe08a', 2.3], ...(comp.wolf ? [['medium', '#9fc6ff', 2.1]] : []), ...(comp.troll ? [['large', '#ff6a4a', 3.2]] : [])];
     for (const sp of SPAWNS) {
       if (!open.has(sp.id)) continue;
-      const r = routeForSpawn(blocked, sp);
-      if (!r) continue;
-      const path = svgEl('path', { d: pathD(r.pts), fill: 'none' }, this.routes);
-      const len = path.getTotalLength();
-      this.routeDots.push({ path, len });
-      if (preview) {
-        const old = routeForSpawn(state.barricades, sp);
-        if (old && Math.abs(old.len - r.len) > 0.5) svgEl('path', { d: pathD(old.pts), fill: 'none', stroke: '#e0603e', 'stroke-width': 3, 'stroke-dasharray': '3 7', 'stroke-linecap': 'round', opacity: 0.8 }, this.oldRoutes);
+      const drawn = [];
+      for (const [size, colour, rad] of sizes) {
+        if (!web.sizesFor(sp).includes(size)) continue;
+        const r = web.routeForSpawn(blocked, sp, size);
+        if (!r) continue;
+        const sig = r.nodes.join();
+        if (drawn.includes(sig)) continue;
+        drawn.push(sig);
+        const path = svgEl('path', { d: pathD(r.pts), fill: 'none' }, this.routes);
+        this.routeDots.push({ path, len: path.getTotalLength(), colour, rad });
+        if (preview && size === 'small') {
+          const old = web.routeForSpawn(state.barricades, sp, size);
+          if (old && Math.abs(old.len - r.len) > 0.5) svgEl('path', { d: pathD(old.pts), fill: 'none', stroke: '#e0603e', 'stroke-width': 3, 'stroke-dasharray': '3 7', 'stroke-linecap': 'round', opacity: 0.8 }, this.oldRoutes);
+        }
       }
     }
     for (const rd of this.routeDots) {
       rd.dots = [];
-      const n = Math.floor(rd.len / 11);
-      for (let i = 0; i < n; i++) rd.dots.push(svgEl('circle', { r: 2.3, fill: '#ffe08a' }, this.routes));
+      const k = Math.floor(rd.len / 11);
+      for (let i = 0; i < k; i++) rd.dots.push(svgEl('circle', { r: rd.rad, fill: rd.colour }, this.routes));
     }
   }
 
@@ -258,11 +272,12 @@ export class WatchView {
           const g = svgEl('g', {}, this.creatures);
           svgEl('circle', { cx: 0, cy: -6, r: 15, fill: 'url(#eg)' }, g);
           const body = svgEl('g', {}, g);
-          const sym = e.type === 'wolf' ? ['wolf', 36, 22] : ['gob', 28, 28];
+          const sym = e.type === 'wolf' ? ['wolf', 36, 22] : e.type === 'troll' ? ['troll', 56, 52] : ['gob', 28, 28];
           svgEl('use', { href: `#${sym[0]}`, x: -sym[1] / 2, y: -sym[2] + 2, width: sym[1], height: sym[2] }, body);
-          const barBg = svgEl('rect', { x: -12, y: -36, width: 24, height: 4, rx: 2, fill: '#2a1414', opacity: 0 }, g);
-          const bar = svgEl('rect', { x: -12, y: -36, width: 24, height: 4, rx: 2, fill: '#e0603e', opacity: 0 }, g);
-          sp = { g, body, bar, barBg, flip: 1 };
+          const bw = e.type === 'troll' ? 44 : 24, by = e.type === 'troll' ? -58 : -36;
+          const barBg = svgEl('rect', { x: -bw / 2, y: by, width: bw, height: 4, rx: 2, fill: '#2a1414', opacity: 0 }, g);
+          const bar = svgEl('rect', { x: -bw / 2, y: by, width: bw, height: 4, rx: 2, fill: '#e0603e', opacity: 0 }, g);
+          sp = { g, body, bar, barBg, flip: 1, bw };
           this.sprites.set(e.id, sp);
         }
         const x = e.px + (e.x - e.px) * alpha;
@@ -277,7 +292,7 @@ export class WatchView {
         const hurt = frac < 0.999;
         sp.bar.setAttribute('opacity', hurt ? 1 : 0);
         sp.barBg.setAttribute('opacity', hurt ? 1 : 0);
-        sp.bar.setAttribute('width', f1(24 * frac));
+        sp.bar.setAttribute('width', f1(sp.bw * frac));
       }
     }
     for (const [id, sp] of this.sprites) if (!seen.has(id)) { sp.g.remove(); this.sprites.delete(id); }

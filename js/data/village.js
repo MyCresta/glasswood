@@ -20,8 +20,9 @@ export const SPAWNS = [
 ];
 
 export const ENEMIES = {
-  goblin: { name: 'Goblin', plural: 'Goblins', hp: 12, speed: 1.25, dmg: 4, rate: 1.0, armor: 0, gold: 2, size: 0.22, first: 1, blurb: 'Small, numerous and greedy. They hammer at the walls with whatever they found.' },
-  wolf: { name: 'Wolf', plural: 'Wolves', hp: 8, speed: 2.5, dmg: 3, rate: 1.25, armor: 0, gold: 3, size: 0.25, first: 3, beast: true, blurb: 'Fast and fragile. They reach the walls long before the goblins.' },
+  troll: { name: 'Troll', plural: 'Trolls', hp: 110, speed: 0.75, dmg: 14, rate: 0.5, armor: 1, gold: 40, size: 0.55, first: 10, boss: true, sizeClass: 'large', blurb: 'Comes every tenth night. Too big for anything but the roads.' },
+  goblin: { name: 'Goblin', plural: 'Goblins', hp: 12, speed: 1.25, dmg: 4, rate: 1.0, armor: 0, gold: 2, size: 0.22, first: 1, sizeClass: 'small', blurb: 'Small, numerous and greedy. They hammer at the walls with whatever they found.' },
+  wolf: { name: 'Wolf', plural: 'Wolves', hp: 8, speed: 2.5, dmg: 3, rate: 1.25, armor: 0, gold: 3, size: 0.25, first: 3, beast: true, sizeClass: 'medium', blurb: 'Fast and fragile. They reach the walls long before the goblins.' },
 };
 
 export const SCALING = {

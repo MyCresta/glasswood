@@ -128,4 +128,13 @@ No build step, static files on GitHub Pages. The simulation is deterministic and
 
 ## 14. Status
 
-Milestone 1 and a first draft (milestone 2) are in: runs, camp with no clock, endless nights, 22 cards in five families with tags, rarity, synergies and rerolls, active and passive spells, the run-over card and Embers, and Hearth with the Great Tower, Walls, Workshop and Shrine growing with the cards. A simulated player that picks sensibly and casts spells when ready ends runs between nights 23 and 38 (median 27).
+Milestones 1 to 3 are in, with the first part of 6:
+
+- **Main menu** on every visit: Continue, New run, Unlocks, How to play, Settings, with Embers, best night and runs finished. Esc or the menu knob opens it and pauses the night.
+- **Starter card:** every run opens on a choice of three cards from a starter pool (four with Wider Choice).
+- **Unlocks for Embers:** eight cards start locked (Crossbow, Frost Witch, Frost Ward, Ember Ward, Iron Gate, Thorn Hedge, Barricade Cart, Twin String) and four boosts (Spare Reroll, Old Stones, Purse, Wider Choice).
+- **Clearer flow:** the night note lists the steps (block paths, start the night) and marks the current one; during the night it says how to cast; the run-over card leads to Unlocks.
+- **Generated forests:** a new seeded path web every run (about 77 crossings and 150 paths), trails, paths and roads, drawn live and rasterised once for the reading glass and the globe. Routing and the never-seal rule work per creature size.
+- **Bosses:** a Troll every tenth night (two from night 40), roads only, from burrows with two roads in. Routes shown before the night: gold for goblins, blue where wolves go another way, red for a boss.
+
+A simulated player with no unlocks ends runs around night 20; with every unlock around night 26 (range 19 to 38). A run earns about 25 to 35 Embers, so the unlocks take roughly eight to ten runs.

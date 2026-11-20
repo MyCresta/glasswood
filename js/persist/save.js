@@ -1,4 +1,5 @@
 // Browser persistence: autosave, a rolling recoverable backup, export/import.
+import { beginRun } from '../sim/run.js';
 import { newGame } from '../sim/state.js';
 import { restartNight } from '../sim/battle.js';
 import { SAVE_VERSION } from '../sim/state.js';
@@ -35,6 +36,16 @@ export function migrate(data) {
     fresh.restarted = true;
     return fresh;
   }
+  if (data.version < 7) {
+    // Version 7 grows a new forest every run, so the old run's barricades no
+    // longer fit: keep everything kept between runs and start a fresh run.
+    const fresh = newGame({ name: data.village.name });
+    fresh.settings = { ...fresh.settings, ...data.settings };
+    fresh.meta = { ...fresh.meta, ...data.meta, unlocks: data.meta?.unlocks || {} };
+    beginRun(fresh);
+    return fresh;
+  }
+  data.meta.unlocks ||= {};
   data.ui ||= {};
   data.ui.view ||= 'watch';
   // a night left half-fought starts again from its beginning

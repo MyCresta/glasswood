@@ -2,7 +2,7 @@
 // and the outcome of each night. Runs on a fixed step so results never depend
 // on frame rate, speed or quality settings.
 import { ENEMIES, SCALING, SPAWNS, NIGHT_CAP, WALL_R } from '../data/village.js';
-import { routeForSpawn } from './web.js';
+import { webFor, ROAD_SPAWNS } from './web.js';
 import { uid } from './state.js';
 import { build } from './build.js';
 import { deal, endRun } from './run.js';
@@ -22,7 +22,8 @@ export function activeSpawns(n) {
 export function enemyStats(type, n) {
   const e = ENEMIES[type];
   return {
-    hp: e.hp * SCALING.hp ** (n - 1),
+    // bosses grow more slowly than the rest, or the tenth nights would decide every run
+    hp: e.hp * (e.boss ? 1.14 : SCALING.hp) ** (n - 1),
     dmg: e.dmg * SCALING.dmg ** (n - 1),
     gold: Math.round(e.gold * (1 + SCALING.gold * (n - 1))),
     speed: e.speed, rate: e.rate, armor: e.armor,
@@ -32,7 +33,9 @@ export function enemyStats(type, n) {
 export function waveComposition(n) {
   const total = 6 + Math.floor((n - 1) * 1.1);
   const wolves = n >= ENEMIES.wolf.first ? Math.round(total * Math.min(0.4, 0.1 + 0.03 * n)) : 0;
-  return { goblin: total - wolves, wolf: wolves };
+  // every tenth night a boss: one troll, two from night 40
+  const trolls = n % 10 === 0 ? 1 + Math.floor(n / 40) : 0;
+  return { goblin: total - wolves, wolf: wolves, troll: trolls };
 }
 
 export function waveGold(n) {
@@ -60,12 +63,14 @@ export function waveSchedule(seed, n) {
   for (const [t, k] of Object.entries(comp)) for (let i = 0; i < k; i++) types.push(t);
   for (let i = types.length - 1; i > 0; i--) { const j = Math.floor(r() * (i + 1)); [types[i], types[j]] = [types[j], types[i]]; }
   const spawns = activeSpawns(n);
+  const big = spawns.filter((sp) => ROAD_SPAWNS.includes(sp.node));
   const spread = Math.min(55, 6 + types.length * 2);
   return types.map((type, i) => ({
-    t: 1.5 + (i / types.length) * spread + r() * 1.2,
+    // bosses come in the middle of the night, from a burrow with roads
+    t: ENEMIES[type].boss ? spread * 0.45 + r() * 4 : 1.5 + (i / types.length) * spread + r() * 1.2,
     type,
-    spawn: spawns[i % spawns.length].id,
-    off: (r() - 0.5) * 0.5,
+    spawn: ENEMIES[type].boss ? big[Math.floor(r() * big.length)].id : spawns[i % spawns.length].id,
+    off: ENEMIES[type].boss ? 0 : (r() - 0.5) * 0.5,
   })).sort((a, b) => a.t - b.t);
 }
 
@@ -115,21 +120,28 @@ export function startNight(state, ev) {
   ev.sound?.('dusk');
 }
 
-// The route from each open burrow, fixed for the night (barricades cannot move at night).
+// Tonight's route from every open burrow, for each size of creature.
 export function nightRoutes(state, n) {
+  const web = webFor(state);
   const out = {};
   for (const sp of activeSpawns(n)) {
-    const r = routeForSpawn(state.barricades || [], sp);
-    const rem = new Array(r.pts.length).fill(0);
-    for (let i = r.pts.length - 2; i >= 0; i--) rem[i] = rem[i + 1] + Math.hypot(r.pts[i + 1][0] - r.pts[i][0], r.pts[i + 1][1] - r.pts[i][1]);
-    out[sp.id] = { pts: r.pts, rem, len: r.len };
+    for (const size of web.sizesFor(sp)) {
+      const r = web.routeForSpawn(state.barricades || [], sp, size);
+      if (!r) continue;
+      const rem = new Array(r.pts.length).fill(0);
+      for (let i = r.pts.length - 2; i >= 0; i--) rem[i] = rem[i + 1] + Math.hypot(r.pts[i + 1][0] - r.pts[i][0], r.pts[i + 1][1] - r.pts[i][1]);
+      out[`${sp.id}:${size}`] = { pts: r.pts, rem, len: r.len, nodes: r.nodes };
+    }
+    out[sp.id] = out[`${sp.id}:small`];
   }
   return out;
 }
 
+const routeOf = (b, e) => b.routes[`${e.spawn}:${ENEMIES[e.type].sizeClass}`] || b.routes[e.spawn];
+
 function spawnEnemy(state, b, s) {
   const st = enemyStats(s.type, b.n);
-  const [x, z] = b.routes[s.spawn].pts[0];
+  const [x, z] = (b.routes[`${s.spawn}:${ENEMIES[s.type].sizeClass}`] || b.routes[s.spawn]).pts[0];
   b.enemies.push({
     id: uid(state, 'e'), type: s.type, x, z, px: x, pz: z,
     hp: st.hp, max: st.hp, speed: st.speed, dmg: st.dmg, rate: st.rate, armor: st.armor, gold: st.gold,
@@ -151,7 +163,7 @@ function moveToward(e, tx, tz, step) {
 
 function remainingDistance(b, e) {
   if (e.state !== 'walk') return 0;
-  const r = b.routes[e.spawn];
+  const r = routeOf(b, e);
   const p = r.pts[Math.min(e.k, r.pts.length - 1)];
   return Math.hypot(p[0] - e.x, p[1] - e.z) + r.rem[Math.min(e.k, r.pts.length - 1)];
 }
@@ -189,7 +201,7 @@ function stepEnemies(state, b, dt) {
     e.px = e.x; e.pz = e.z;
     const sp = speedNow(e, bd);
     if (e.state === 'walk') {
-      const route = b.routes[e.spawn];
+      const route = routeOf(b, e);
       let budget = sp * dt;
       while (budget > 1e-6 && e.k < route.pts.length) {
         const [tx, tz] = route.pts[e.k];

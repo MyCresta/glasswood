@@ -1,5 +1,5 @@
 // Barricades on the forest paths. How many the village has comes from its cards.
-import { canBlock } from './web.js';
+import { webFor } from './web.js';
 import { build } from './build.js';
 
 export const barricadeMax = (state) => build(state).barricades;
@@ -7,7 +7,7 @@ export const barricadeMax = (state) => build(state).barricades;
 export function barricadeBlocker(state, key) {
   if (state.phase === 'night') return 'Barricades can only be moved between nights.';
   if (state.phase === 'over') return 'This run is over.';
-  const r = canBlock(state.barricades, key, barricadeMax(state));
+  const r = webFor(state).canBlock(state.barricades, key, barricadeMax(state));
   return r.ok ? null : r.reason;
 }
 

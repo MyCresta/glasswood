@@ -8,7 +8,9 @@ import { Audio } from './audio/audio.js';
 import { newGame, newRun } from './sim/state.js';
 import { makeEvents, pump, callNight } from './sim/time.js';
 import { placeBarricade, removeBarricade, barricadeBlocker } from './sim/village.js';
-import { pick, reroll, endRun } from './sim/run.js';
+import { pick, reroll, endRun, beginRun, buyUnlock } from './sim/run.js';
+import { UNLOCK } from './data/unlocks.js';
+import { CARD } from './data/cards.js';
 import { castSpell } from './sim/battle.js';
 import { storageAvailable, saveGame, loadGame, exportCode, parseImport, deleteSave, downloadText } from './persist/save.js';
 import { createTabLock } from './persist/tablock.js';
@@ -41,9 +43,9 @@ function handleEvents(ev) {
   }
   // the draft and the end of a run open on their own
   const ph = game.state.phase;
-  if (ph !== game.shownPhase) {
+  if (ph !== game.shownPhase && !game.menuOpen) {
     game.shownPhase = ph;
-    if (ph === 'draft') game.desk.draft();
+    if (ph === 'draft' || ph === 'starter') game.desk.draft();
     if (ph === 'over') game.desk.runOver();
     if (ph !== 'night') game.arm(null);
   }
@@ -70,12 +72,51 @@ game.pick = (id) => {
   return r;
 };
 game.reroll = () => { const r = game.act((s) => reroll(s)); if (r.ok) game.desk.draft(); };
-game.newRun = () => {
-  newRun(game.state, undefined, Date.now());
+game.newRun = (abandon = false) => {
+  const s = game.state;
+  if (abandon && s.phase !== 'over') { s.battle = null; endRun(s, null); }
+  newRun(s, undefined, Date.now());
+  beginRun(s);
+  game.closeMenu(false);
   game.shownPhase = null;
   document.getElementById('overlay').hidden = true;
   game.act(() => ({ ok: true }));
-  game.desk.say('done', 'A new globe');
+  game.desk.say('done', 'A new forest grows in the globe');
+};
+// the very first run, after the village is named
+game.begin = () => {
+  beginRun(game.state);
+  game.shownPhase = null;
+  game.act(() => ({ ok: true }));
+};
+game.buy = (id) => {
+  const r = game.act((s) => buyUnlock(s, id));
+  if (r.ok) { const u = UNLOCK[id]; game.desk.say('done', u.kind === 'card' ? `${CARD[u.card].name} joins the deck` : `${u.name} bought`); game.audio.play('build'); }
+  return r;
+};
+
+// ---------- the menu: pauses the game while it is open ----------
+game.openMenu = (opts = {}) => {
+  const s = game.state;
+  if (!game.menuOpen) { game.menuOpen = true; game.menuPaused = s.paused; s.paused = true; }
+  game.menuFresh = !!opts.fresh;
+  game.arm(null);
+  game.desk.menu(opts);
+};
+game.closeMenu = (reopen = true) => {
+  if (!game.menuOpen) return;
+  const s = game.state;
+  game.menuOpen = false;
+  s.paused = !!game.menuPaused;
+  s.lastTick = Date.now();
+  const root = document.getElementById('overlay');
+  root.hidden = true; root.replaceChildren();
+  if (!reopen) return;
+  // put back whatever the phase needs on the desk
+  if (s.phase === 'draft' || s.phase === 'starter') game.desk.draft();
+  else if (s.phase === 'over') game.desk.runOver();
+  game.shownPhase = s.phase;
+  game.desk.refresh();
 };
 // Spells: arm one, then click the glass (Mend needs no aim).
 game.armed = null;
@@ -130,7 +171,9 @@ game.openSettings = () => {
   const save = () => { applySettings(); game.touch(); };
   const toggle = (label, key, hint) => h('label.check', {}, h('input', { type: 'checkbox', checked: st[key], onchange: (e) => { st[key] = e.target.checked; save(); } }), h('span', {}, label, hint ? h('span.small', { style: { display: 'block', fontFamily: 'var(--sa)', color: '#5a3e26' } }, hint) : null));
   const slider = (label, key) => h('label.slider', {}, h('span', {}, label), h('input', { type: 'range', min: 0, max: 1, step: 0.05, value: st.volume[key], oninput: (e) => { st.volume[key] = Number(e.target.value); save(); } }));
-  game.desk.overlay((body, close) => {
+  game.desk.overlay((body, closeOverlay) => {
+    // from the menu, closing settings goes back to the menu
+    const close = () => { closeOverlay(); if (game.menuOpen) game.desk.menu({ fresh: game.menuFresh }); };
     const io = h('div.stack', { hidden: true });
     const area = h('textarea', { rows: 3, 'aria-label': 'Save code', style: { width: '100%', font: '13px var(--sa)', background: 'rgba(255,248,230,.5)', border: '1px solid #5a3e26', color: '#23170f' } });
     io.append(area, h('div.row', {}, slip('Load this code', () => {
@@ -151,7 +194,8 @@ game.openSettings = () => {
         slip('Load a save code', () => { io.hidden = false; area.value = ''; area.focus(); }),
         slip('Give up this run', () => {
           if (!confirm('End this run now? Its Embers are kept.')) return;
-          close();
+          game.closeMenu(false);
+          closeOverlay();
           game.act((st, ev) => { st.battle = null; endRun(st, ev); return { ok: true }; });
         }),
         slip('Erase everything', () => {
@@ -159,7 +203,7 @@ game.openSettings = () => {
           game.leaving = true; deleteSave(); location.reload();
         })),
       io,
-      h('p.hand.small', { style: { margin: '4px 0 0' } }, 'Keys: 1, 2 and 3 switch views. N calls the night, Q W E R cast spells, Space pauses, O opens settings.')));
+      h('p.hand.small', { style: { margin: '4px 0 0' } }, 'Keys: 1, 2 and 3 switch views. N calls the night, Q W E R cast spells, Space pauses, Esc opens the menu, O settings.')));
   });
 };
 
@@ -204,7 +248,13 @@ function frame(now) {
 }
 
 function keys(e) {
-  if (e.target.closest('input, textarea') || !document.getElementById('overlay').hidden) { if (e.key === 'Escape') document.querySelector('#overlay .close')?.click(); return; }
+  if (e.target.closest('input, textarea') || !document.getElementById('overlay').hidden) {
+    if (e.key !== 'Escape') return;
+    if (game.menuOpen) { if (!game.menuFresh) game.closeMenu(); }
+    else if (document.querySelector('#overlay .close')) document.querySelector('#overlay .close').click();
+    else game.openMenu();
+    return;
+  }
   const s = game.state;
   if (e.key === '1') game.setView('wilds');
   else if (e.key === '2') game.setView('watch');
@@ -212,7 +262,8 @@ function keys(e) {
   else if (e.key === 'o' || e.key === 'O') game.openSettings();
   else if (e.key === 'n' || e.key === 'N') { if (s.phase === 'day') game.callNight(); }
   else if (s.phase === 'night' && /^[qwer]$/i.test(e.key)) game.desk.spellKey('qwer'.indexOf(e.key.toLowerCase()));
-  else if (e.key === 'Escape') game.arm(null);
+  else if (e.key === 'Escape') { if (game.armed) game.arm(null); else game.openMenu(); }
+  else if (e.key === 'm' || e.key === 'M') game.openMenu();
   else if (e.key === ' ' && !e.target.closest('button, [role="button"]')) {
     e.preventDefault();
     game.act((st) => { st.paused = !st.paused; st.lastTick = Date.now(); return { ok: true }; });
@@ -244,17 +295,13 @@ function begin(state, fresh) {
   game.view.views.hearth.select(state.ui.building || 'archery');
   applySettings();
   running = true;
-  if (state.restarted) {
-    // a save from the idle version of the game
-    delete state.restarted;
-    game.desk.overlay((body, close) => body.append(h('div.stack', {},
-      h('h2', {}, 'Glasswood is a roguelike now'),
-      kit.hint('Every run is a new globe. Hold as many nights as you can; after each one, choose a card. When the walls fall, the run ends and you keep its Embers.', 'ink'),
-      h('div.row', { style: { marginTop: '6px' } }, kit.seal('Begin', close)))));
-  }
-  game.shownPhase = state.phase === 'draft' || state.phase === 'over' ? null : state.phase;
+  const restarted = !!state.restarted;
+  delete state.restarted;
+  game.shownPhase = state.phase;
   game.desk.refresh();
   game.view.sync(state, null);
+  // every visit opens on the menu
+  game.openMenu({ fresh: fresh || restarted });
   game.saveNow();
   setInterval(() => { if (document.hidden) step(); }, 250);
   setInterval(() => game.saveNow(), SAVE_EVERY);
@@ -268,26 +315,7 @@ function startGame() {
   let saved = null;
   if (storageAvailable()) { try { saved = loadGame(); } catch (err) { console.warn(err); } }
   if (saved) return begin(saved, false);
-  const state = newGame({ now: Date.now() });
-  state.paused = true;
-  begin(state, true);
-  game.desk.overlay((body, close) => {
-    const input = h('input', { type: 'text', value: 'Emberfold', maxlength: 24, 'aria-label': 'Village name' });
-    const go = () => {
-      game.state.village.name = input.value.trim() || 'Emberfold';
-      game.state.paused = false;
-      game.state.lastTick = Date.now();
-      close();
-      game.act(() => ({ ok: true }));
-      game.desk.say('done', `${game.state.village.name} lights its lanterns`);
-    };
-    input.addEventListener('keydown', (e) => { if (e.key === 'Enter') go(); });
-    body.append(h('div.stack', {},
-      h('h2', {}, 'A village under glass'),
-      kit.hint('Inside the globe on your desk, a tiny village keeps watch over a dark forest. Every night creatures walk the forest paths towards it. Block paths, and after every night you hold, choose a card: defenders for the tower, spells, walls, barricades. How many nights can you hold?', 'ink'),
-      h('label', { class: 'hand', style: { fontSize: '15px' } }, 'Name the village', input),
-      h('div.row', { style: { marginTop: '6px' } }, h('div.seal', { style: { '--size': '92px' } }, h('button', { type: 'button', onclick: go }, h('span', {}, 'Light the<br>lanterns'.replace('<br>', ' ')))))));
-  });
+  begin(newGame({ now: Date.now() }), true);
 }
 
 function boot() {

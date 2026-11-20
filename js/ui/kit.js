@@ -34,6 +34,8 @@ export const ICON = {
   paces: line('<ellipse cx="8" cy="8.5" rx="2.6" ry="4"/><ellipse cx="16" cy="15.5" rx="2.6" ry="4"/>'),
   repeat: line('<path d="M4.5 11a7.5 7.5 0 0 1 13.2-4.6M19 3.5v4h-4M19.5 13a7.5 7.5 0 0 1-13.2 4.6M5 20.5v-4h4"/>'),
   goal: line('<path d="M5.5 21V3.5M5.5 4h12l-3 4 3 4h-12"/>'),
+  menu: line('<path d="M4 6.5h16M4 12h16M4 17.5h16"/>'),
+  lock: line('<rect x="5.5" y="10.5" width="13" height="9.5" rx="1.5"/><path d="M8.5 10.5V8a3.5 3.5 0 0 1 7 0v2.5"/>'),
   gear: line('<circle cx="12" cy="12" r="3.2"/><path d="M12 2.5v3M12 18.5v3M2.5 12h3M18.5 12h3M5.3 5.3l2.1 2.1M16.6 16.6l2.1 2.1M5.3 18.7l2.1-2.1M16.6 7.4l2.1-2.1"/>'),
   wilds: line('<circle cx="12" cy="10.5" r="7.5"/><path d="M5 12.5c4.5 2.5 9.5 2.5 14 0M7.5 21h9M10 18v3M14 18v3"/>'),
   watch: line('<circle cx="14" cy="10" r="6.5"/><path d="M9.3 14.7 3 21"/>'),
@@ -124,6 +126,8 @@ export const toggle = (ic, word, checked, onChange, title) => h('label.toggle', 
 // pieces: a row of the same thing, the first `left` of `total` still unused
 export const pieces = (svg, left, total, title) => h('div.pieces', { title }, Array.from({ length: total }, (_, i) => h(`span${i < left ? '' : '.used'}`, { html: svg })));
 export const chips = (words) => h('div.chips', {}, words.map((w) => h('span.chip', {}, w)));
+// A short numbered list of what to do next: done steps are struck, the current one is marked.
+export const steps = (items) => h('ol.steps', {}, items.filter(Boolean).map((it, i) => h(`li${it.done ? '.done' : ''}${it.now ? '.now' : ''}`, { title: it.title || null }, h('b.n', {}, String(i + 1)), h('span', {}, it.text))));
 export const hint = (text, tone = 'soft', title) => h(`span.hint.${tone}`, { title }, text);
 export const badge = (value, title) => h('span.badge', { title }, value);
 export const pips = (n, of = 5, title) => h('span.pips', { title }, h('b.red', {}, '◆'.repeat(n)), h('span.dim', {}, '◆'.repeat(of - n)));
