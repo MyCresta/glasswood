@@ -1,5 +1,6 @@
 // Browser persistence: autosave, a rolling recoverable backup, export/import.
 import { beginRun } from '../sim/run.js';
+import { webForSeed } from '../sim/web.js';
 import { newGame } from '../sim/state.js';
 import { restartNight } from '../sim/battle.js';
 import { SAVE_VERSION } from '../sim/state.js';
@@ -46,6 +47,11 @@ export function migrate(data) {
     return fresh;
   }
   data.meta.unlocks ||= {};
+  data.upgrades ||= {};
+  data.rested ||= {};
+  // a run saved before the forests were redrawn: drop barricades on paths that no longer exist
+  const web = webForSeed(data.seed);
+  data.barricades = (data.barricades || []).filter((k) => web.EDGE.has(k));
   data.ui ||= {};
   data.ui.view ||= 'watch';
   // a night left half-fought starts again from its beginning
